@@ -263,52 +263,8 @@ export function useReportMatch() {
         .eq('id', loserClanId)
     }
 
-    // Update warrior stats for winners
-    if (winnerParticipants.length > 0) {
-      for (const odiumUserId of winnerParticipants) {
-        const { data: currentWarrior } = await supabase
-          .from('profiles')
-          .select('warrior_points, warrior_wins, warrior_power_wins, current_win_streak, current_loss_streak, max_win_streak')
-          .eq('id', odiumUserId)
-          .single()
-
-        if (currentWarrior) {
-          const newWinStreak = (currentWarrior.current_win_streak || 0) + 1
-          await supabase
-            .from('profiles')
-            .update({
-              warrior_points: (currentWarrior.warrior_points || 0) + pointsAwarded,
-              warrior_wins: (currentWarrior.warrior_wins || 0) + 1,
-              current_win_streak: newWinStreak,
-              current_loss_streak: 0,
-              max_win_streak: Math.max(currentWarrior.max_win_streak || 0, newWinStreak)
-            })
-            .eq('id', odiumUserId)
-        }
-      }
-    }
-
-    // Update warrior stats for losers
-    if (loserParticipants.length > 0) {
-      for (const odiumUserId of loserParticipants) {
-        const { data: currentWarrior } = await supabase
-          .from('profiles')
-          .select('warrior_losses, current_win_streak, current_loss_streak')
-          .eq('id', odiumUserId)
-          .single()
-
-        if (currentWarrior) {
-          await supabase
-            .from('profiles')
-            .update({
-              warrior_losses: (currentWarrior.warrior_losses || 0) + 1,
-              current_win_streak: 0,
-              current_loss_streak: (currentWarrior.current_loss_streak || 0) + 1
-            })
-            .eq('id', odiumUserId)
-        }
-      }
-    }
+    // Note: Warrior stats are updated automatically by the database trigger
+    // (trigger_update_warrior_stats) when participants are inserted into match_participants
 
     setSubmitting(false)
     return {
