@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Users,
@@ -6,10 +6,12 @@ import {
   Search,
   Trophy,
   Zap,
-  Crown
+  Crown,
+  Camera
 } from 'lucide-react'
 import { useClans, useClanActions } from '../hooks/useClans'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
 import { Modal } from '../components/ui/Modal'
 import { Alert } from '../components/ui/Alert'
@@ -25,14 +27,58 @@ export function ClansListPage() {
   const [newClanName, setNewClanName] = useState('')
   const [newClanTag, setNewClanTag] = useState('')
   const [newClanDesc, setNewClanDesc] = useState('')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState('')
+  const logoInputRef = useRef<HTMLInputElement>(null)
 
   const filteredClans = clans.filter(
     (clan) =>
       clan.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       clan.tag.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+      setCreateError('Please select a valid image file (JPEG, PNG, GIF, or WebP)')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setCreateError('Image must be less than 5MB')
+      return
+    }
+
+    setLogoFile(file)
+    setCreateError('')
+
+    const reader = new FileReader()
+    reader.onloadend = () => setLogoPreview(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  const uploadLogo = async (clanId: string): Promise<string | null> => {
+    if (!logoFile) return null
+
+    const fileExt = logoFile.name.split('.').pop()
+    const fileName = `${clanId}/logo.${fileExt}`
+
+    const { error } = await supabase.storage
+      .from('clan-logos')
+      .upload(fileName, logoFile, { upsert: true })
+
+    if (error) {
+      console.error('Logo upload error:', error)
+      return null
+    }
+
+    const { data } = supabase.storage.from('clan-logos').getPublicUrl(fileName)
+    return data.publicUrl
+  }
 
   const handleCreateClan = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -50,13 +96,30 @@ export function ClansListPage() {
 
     setCreateLoading(true)
 
+    // First create clan without logo
     const { error, data } = await createClan(newClanName, newClanTag, newClanDesc || undefined)
 
     if (error) {
       setCreateError(error.message)
       setCreateLoading(false)
-    } else if (data) {
+      return
+    }
+
+    // Then upload logo if provided
+    if (data && logoFile) {
+      const logoUrl = await uploadLogo(data.id)
+      if (logoUrl) {
+        await supabase
+          .from('clans')
+          .update({ logo_url: logoUrl })
+          .eq('id', data.id)
+      }
+    }
+
+    if (data) {
       setShowCreateModal(false)
+      setLogoFile(null)
+      setLogoPreview(null)
       navigate(`/clan/${data.id}`)
     }
   }
@@ -125,8 +188,12 @@ export function ClansListPage() {
               <div className="flex items-start gap-4">
                 {/* Rank Badge */}
                 <div className="relative">
-                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-lg group-hover:shadow-accent-primary/30 transition-shadow">
-                    <span className="text-lg font-display font-bold">{clan.tag}</span>
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-lg group-hover:shadow-accent-primary/30 transition-shadow overflow-hidden">
+                    {clan.logo_url ? (
+                      <img src={clan.logo_url} alt={clan.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-lg font-display font-bold">{clan.tag}</span>
+                    )}
                   </div>
                   {index < 3 && (
                     <div className="absolute -top-2 -right-2">
@@ -191,6 +258,42 @@ export function ClansListPage() {
             type="info"
             message="As the creator, you will be the Captain (Boss) of the clan with full management permissions."
           />
+
+          {/* Logo Upload */}
+          <div className="flex flex-col items-center">
+            <div className="relative group">
+              <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-lg overflow-hidden">
+                {logoPreview ? (
+                  <img src={logoPreview} alt="Clan logo" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-2xl font-display font-bold text-white">
+                    {newClanTag || '?'}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 rounded-xl transition-opacity"
+              >
+                <Camera className="w-6 h-6 text-white" />
+              </button>
+            </div>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              onChange={handleLogoSelect}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              className="mt-2 text-sm text-accent-primary hover:underline"
+            >
+              {logoPreview ? 'Change Logo' : 'Add Logo (optional)'}
+            </button>
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">

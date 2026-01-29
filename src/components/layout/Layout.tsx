@@ -1,8 +1,12 @@
 import React from 'react'
 import { Outlet } from 'react-router-dom'
 import { Navbar } from './Navbar'
+import { useCurrentSeason } from '../../hooks/useSeasons'
 
 export function Layout() {
+  // This hook checks and auto-rotates seasons when the app loads
+  useCurrentSeason()
+
   return (
     <div className="min-h-screen bg-dark-900">
       <Navbar />

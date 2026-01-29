@@ -230,10 +230,14 @@ export function Navbar() {
                     to={`/player/${profile.id}`}
                     className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
                   >
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center">
-                      <span className="text-sm font-bold">
-                        {profile.nickname.charAt(0).toUpperCase()}
-                      </span>
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center overflow-hidden">
+                      {profile.avatar_url ? (
+                        <img src={profile.avatar_url} alt={profile.nickname} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-sm font-bold">
+                          {profile.nickname.charAt(0).toUpperCase()}
+                        </span>
+                      )}
                     </div>
                     <span className="font-medium">{profile.nickname}</span>
                   </Link>

@@ -224,8 +224,12 @@ function WarriorRow({ warrior, rank }: WarriorRowProps) {
             lastSeen={warrior.last_seen}
             size="sm"
           />
-          <div className="w-10 h-10 rounded-lg bg-dark-600 flex items-center justify-center font-bold">
-            {warrior.nickname.charAt(0).toUpperCase()}
+          <div className="w-10 h-10 rounded-lg bg-dark-600 flex items-center justify-center font-bold overflow-hidden">
+            {warrior.avatar_url ? (
+              <img src={warrior.avatar_url} alt={warrior.nickname} className="w-full h-full object-cover" />
+            ) : (
+              warrior.nickname.charAt(0).toUpperCase()
+            )}
           </div>
           <div>
             <Link

@@ -202,8 +202,12 @@ function ClanRankRow({
           to={`/clan/${clan.id}`}
           className="flex items-center gap-3 group"
         >
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-lg">
-            <span className="text-sm font-bold">{clan.tag}</span>
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-lg overflow-hidden">
+            {clan.logo_url ? (
+              <img src={clan.logo_url} alt={clan.name} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-sm font-bold">{clan.tag}</span>
+            )}
           </div>
           <div>
             <div className="flex items-center gap-2">

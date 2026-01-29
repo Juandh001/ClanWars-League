@@ -20,6 +20,7 @@ export interface Database {
           last_seen: string
           created_at: string
           updated_at: string
+          nickname_changed_at: string | null
           // Warrior stats
           warrior_points: number
           warrior_wins: number
@@ -39,6 +40,7 @@ export interface Database {
           last_seen?: string
           created_at?: string
           updated_at?: string
+          nickname_changed_at?: string | null
           warrior_points?: number
           warrior_wins?: number
           warrior_losses?: number
@@ -57,6 +59,7 @@ export interface Database {
           last_seen?: string
           created_at?: string
           updated_at?: string
+          nickname_changed_at?: string | null
           warrior_points?: number
           warrior_wins?: number
           warrior_losses?: number

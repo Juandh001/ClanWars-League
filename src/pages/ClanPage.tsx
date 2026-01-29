@@ -15,7 +15,8 @@ import {
   Flame,
   Star,
   Search,
-  UserCheck
+  UserCheck,
+  Edit3
 } from 'lucide-react'
 import { useClan, useClanActions, useClans, useUserSearch } from '../hooks/useClans'
 import { useMatches, useReportMatch, useClanMembers, MATCH_MODES, getPlayersPerTeam } from '../hooks/useMatches'
@@ -28,6 +29,7 @@ import { Modal } from '../components/ui/Modal'
 import { Alert } from '../components/ui/Alert'
 import { BadgeDisplay, BadgeSummary } from '../components/ui/BadgeDisplay'
 import { StreakIndicator } from '../components/ui/StreakIndicator'
+import { ClanEditModal } from '../components/ui/ClanEditModal'
 import { format } from 'date-fns'
 
 export function ClanPage() {
@@ -48,6 +50,7 @@ export function ClanPage() {
   const [invitedName, setInvitedName] = useState('')
 
   const [showReportModal, setShowReportModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   const isCaptain = user && clan?.captain_id === user.id
   const isMember = user && clan?.members.some(m => m.user_id === user.id)
@@ -129,8 +132,12 @@ export function ClanPage() {
       <div className="card p-8">
         <div className="flex flex-col md:flex-row items-start gap-6">
           {/* Logo */}
-          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-2xl shadow-accent-primary/25">
-            <span className="text-3xl font-display font-bold">{clan.tag}</span>
+          <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-2xl shadow-accent-primary/25 overflow-hidden">
+            {clan.logo_url ? (
+              <img src={clan.logo_url} alt={clan.name} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-3xl font-display font-bold">{clan.tag}</span>
+            )}
           </div>
 
           {/* Info */}
@@ -139,6 +146,15 @@ export function ClanPage() {
               <div>
                 <div className="flex items-center gap-3 mb-1">
                   <h1 className="text-3xl font-display font-bold">{clan.name}</h1>
+                  {isCaptain && (
+                    <button
+                      onClick={() => setShowEditModal(true)}
+                      className="p-2 text-gray-400 hover:text-accent-primary hover:bg-dark-700 rounded-lg transition-colors"
+                      title="Edit Clan"
+                    >
+                      <Edit3 className="w-5 h-5" />
+                    </button>
+                  )}
                   {badges.length > 0 && (
                     <BadgeDisplay badges={badges} size="md" showSeasonInfo />
                   )}
@@ -253,10 +269,14 @@ export function ClanPage() {
                         isOnline={isOnline}
                         lastSeen={member.profile.last_seen}
                       />
-                      <div className="w-10 h-10 rounded-lg bg-dark-600 flex items-center justify-center">
-                        <span className="font-semibold">
-                          {member.profile.nickname.charAt(0).toUpperCase()}
-                        </span>
+                      <div className="w-10 h-10 rounded-lg bg-dark-600 flex items-center justify-center overflow-hidden">
+                        {member.profile.avatar_url ? (
+                          <img src={member.profile.avatar_url} alt={member.profile.nickname} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="font-semibold">
+                            {member.profile.nickname.charAt(0).toUpperCase()}
+                          </span>
+                        )}
                       </div>
                       <div>
                         <Link
@@ -437,10 +457,14 @@ export function ClanPage() {
                         onClick={() => handleSelectUser({ id: user.id, nickname: user.nickname })}
                         className="w-full px-4 py-3 text-left hover:bg-dark-600 flex items-center gap-3 transition-colors"
                       >
-                        <div className="w-8 h-8 rounded-full bg-dark-500 flex items-center justify-center">
-                          <span className="text-sm font-medium">
-                            {user.nickname.charAt(0).toUpperCase()}
-                          </span>
+                        <div className="w-8 h-8 rounded-full bg-dark-500 flex items-center justify-center overflow-hidden">
+                          {user.avatar_url ? (
+                            <img src={user.avatar_url} alt={user.nickname} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-sm font-medium">
+                              {user.nickname.charAt(0).toUpperCase()}
+                            </span>
+                          )}
                         </div>
                         <div>
                           <p className="font-medium">{user.nickname}</p>
@@ -524,6 +548,22 @@ export function ClanPage() {
         clanId={clan.id}
         onSuccess={refetch}
       />
+
+      {/* Edit Clan Modal */}
+      {isCaptain && (
+        <ClanEditModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={() => refetch()}
+          clan={{
+            id: clan.id,
+            name: clan.name,
+            tag: clan.tag,
+            description: clan.description,
+            logo_url: clan.logo_url
+          }}
+        />
+      )}
     </div>
   )
 }

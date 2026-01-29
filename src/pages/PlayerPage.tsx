@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   User,
@@ -10,22 +10,28 @@ import {
   TrendingUp,
   Award,
   Flame,
-  Star
+  Star,
+  Edit3
 } from 'lucide-react'
 import { useProfile, usePlayerStats } from '../hooks/useProfiles'
 import { useBadges } from '../hooks/useBadges'
+import { useAuth } from '../contexts/AuthContext'
 import { LoadingScreen } from '../components/ui/LoadingSpinner'
 import { StatusIndicator } from '../components/ui/StatusIndicator'
 import { BadgeDisplay, BadgeSummary } from '../components/ui/BadgeDisplay'
 import { StreakIndicator } from '../components/ui/StreakIndicator'
+import { ProfileEditModal } from '../components/ui/ProfileEditModal'
 import { format } from 'date-fns'
 
 export function PlayerPage() {
   const { id } = useParams<{ id: string }>()
-  const { profile, loading: profileLoading } = useProfile(id)
+  const { profile, loading: profileLoading, refetch: refetchProfile } = useProfile(id)
   const { stats, matches, loading: statsLoading } = usePlayerStats(id)
   const { badges } = useBadges(id, 'warrior')
+  const { user } = useAuth()
+  const [showEditModal, setShowEditModal] = useState(false)
 
+  const isOwnProfile = user?.id === id
   const loading = profileLoading || statsLoading
 
   if (loading) {
@@ -54,10 +60,18 @@ export function PlayerPage() {
         <div className="flex flex-col md:flex-row items-start gap-6">
           {/* Avatar */}
           <div className="relative">
-            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-2xl shadow-accent-primary/25">
-              <span className="text-4xl font-display font-bold">
-                {profile.nickname.charAt(0).toUpperCase()}
-              </span>
+            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-2xl shadow-accent-primary/25 overflow-hidden">
+              {profile.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.nickname}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-4xl font-display font-bold">
+                  {profile.nickname.charAt(0).toUpperCase()}
+                </span>
+              )}
             </div>
             <div className="absolute -bottom-1 -right-1">
               <StatusIndicator
@@ -72,6 +86,15 @@ export function PlayerPage() {
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-3xl font-display font-bold">{profile.nickname}</h1>
+              {isOwnProfile && (
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="p-2 text-gray-400 hover:text-accent-primary hover:bg-dark-700 rounded-lg transition-colors"
+                  title="Edit Profile"
+                >
+                  <Edit3 className="w-5 h-5" />
+                </button>
+              )}
               {badges.length > 0 && (
                 <BadgeDisplay badges={badges} size="md" showSeasonInfo />
               )}
@@ -296,6 +319,15 @@ export function PlayerPage() {
           </div>
         )}
       </div>
+
+      {/* Edit Profile Modal */}
+      {isOwnProfile && (
+        <ProfileEditModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={() => refetchProfile()}
+        />
+      )}
     </div>
   )
 }

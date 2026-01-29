@@ -134,7 +134,7 @@ export function useUserSearch() {
 export function useClanActions() {
   const { user, refreshProfile } = useAuth()
 
-  const createClan = async (name: string, tag: string, description?: string) => {
+  const createClan = async (name: string, tag: string, description?: string, logo_url?: string) => {
     if (!user || !isSupabaseConfigured()) {
       return { error: new Error('Not authenticated'), data: null }
     }
@@ -146,6 +146,7 @@ export function useClanActions() {
         name,
         tag: tag.toUpperCase(),
         description,
+        logo_url,
         captain_id: user.id,
         points: 0,
         power_wins: 0,
@@ -171,6 +172,20 @@ export function useClanActions() {
 
     await refreshProfile()
     return { error: null, data: clanData }
+  }
+
+  const updateClan = async (clanId: string, updates: { name?: string; description?: string; logo_url?: string }) => {
+    if (!user || !isSupabaseConfigured()) {
+      return { error: new Error('Not authenticated') }
+    }
+
+    const { error } = await supabase
+      .from('clans')
+      .update(updates)
+      .eq('id', clanId)
+      .eq('captain_id', user.id) // Ensure user is captain
+
+    return { error }
   }
 
   // New: Invite by nickname (searches user and creates invitation)
@@ -476,6 +491,7 @@ export function useClanActions() {
 
   return {
     createClan,
+    updateClan,
     inviteMember,
     inviteMemberByNickname,
     acceptInvitation,
