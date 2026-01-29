@@ -53,30 +53,42 @@ export function useWarriorRankings(seasonId?: string | null) {
       setWarriors(rankings)
     } else {
       // Fetch current season warriors from profiles
-      const { data, error } = await supabase
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select(`
-          *,
-          clan_members(
-            clan:clans(*)
-          )
-        `)
+        .select('*')
         .or('warrior_wins.gt.0,warrior_losses.gt.0')
         .order('warrior_points', { ascending: false })
 
-      if (error) {
-        setError(error.message)
+      if (profilesError) {
+        setError(profilesError.message)
         setLoading(false)
         return
       }
 
-      const rankings: WarriorRanking[] = (data as WarriorWithClan[] || []).map((profile) => {
-        const clan = profile.clan_members?.[0]?.clan
+      // Fetch clan memberships for these warriors
+      const warriorIds = (profilesData || []).map(p => p.id)
+
+      const { data: membersData } = await supabase
+        .from('clan_members')
+        .select(`
+          user_id,
+          clan:clans(id, name, tag, logo_url)
+        `)
+        .in('user_id', warriorIds)
+
+      // Create a map of user_id to clan
+      const clanMap = new Map<string, any>()
+      ;(membersData || []).forEach((m: any) => {
+        clanMap.set(m.user_id, m.clan)
+      })
+
+      const rankings: WarriorRanking[] = (profilesData || []).map((profile: any) => {
+        const clan = clanMap.get(profile.id)
         return {
           ...profile,
-          clan: clan,
-          clan_tag: clan?.tag,
-          clan_name: clan?.name,
+          clan: clan || null,
+          clan_tag: clan?.tag || null,
+          clan_name: clan?.name || null,
           days_inactive: calculateDaysInactive(profile.last_seen),
           total_games: (profile.warrior_wins || 0) + (profile.warrior_losses || 0)
         }

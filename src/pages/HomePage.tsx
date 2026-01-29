@@ -98,7 +98,7 @@ export function HomePage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="card p-4 md:p-6 flex items-center gap-3">
           <div className="p-2 md:p-3 bg-accent-primary/20 rounded-xl">
             <Users className="w-5 h-5 md:w-6 md:h-6 text-accent-primary" />
@@ -217,6 +217,7 @@ export function HomePage() {
                   <tr>
                     <th className="table-header w-12">#</th>
                     <th className="table-header">Warrior</th>
+                    <th className="table-header text-center">Clan</th>
                     <th className="table-header text-center">
                       <Flame className="w-4 h-4 text-orange-400 mx-auto" />
                     </th>
@@ -370,16 +371,20 @@ function WarriorRankRow({
                 <BadgeDisplay badges={badges} size="sm" maxDisplay={2} />
               )}
             </Link>
-            {warrior.clan_tag && (
-              <Link
-                to={`/clan/${warrior.clan?.id}`}
-                className="text-xs text-accent-primary hover:underline"
-              >
-                [{warrior.clan_tag}]
-              </Link>
-            )}
           </div>
         </div>
+      </td>
+      <td className="table-cell text-center">
+        {warrior.clan_tag ? (
+          <Link
+            to={warrior.clan ? `/clan/${warrior.clan.id}` : '#'}
+            className="px-2 py-0.5 bg-dark-600 text-white rounded text-xs font-semibold hover:bg-dark-500 transition-colors"
+          >
+            {warrior.clan_tag}
+          </Link>
+        ) : (
+          <span className="text-gray-500 text-xs">-</span>
+        )}
       </td>
       <td className="table-cell text-center">
         <StreakBadge

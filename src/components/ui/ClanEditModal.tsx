@@ -20,6 +20,7 @@ interface ClanEditModalProps {
 export function ClanEditModal({ isOpen, onClose, onSuccess, clan }: ClanEditModalProps) {
   const { updateClan } = useClanActions()
   const [name, setName] = useState(clan.name)
+  const [tag, setTag] = useState(clan.tag)
   const [description, setDescription] = useState(clan.description || '')
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
@@ -31,6 +32,7 @@ export function ClanEditModal({ isOpen, onClose, onSuccess, clan }: ClanEditModa
   // Reset form when clan changes
   useEffect(() => {
     setName(clan.name)
+    setTag(clan.tag)
     setDescription(clan.description || '')
     setLogoPreview(null)
     setLogoFile(null)
@@ -102,7 +104,19 @@ export function ClanEditModal({ isOpen, onClose, onSuccess, clan }: ClanEditModa
       return
     }
 
+    // Validate tag
+    if (tag.length < 2 || tag.length > 5) {
+      setError('Clan tag must be between 2 and 5 characters')
+      return
+    }
+
+    if (!/^[A-Za-z0-9]+$/.test(tag)) {
+      setError('Clan tag can only contain letters and numbers')
+      return
+    }
+
     const hasChanges = name !== clan.name ||
+                       tag !== clan.tag ||
                        description !== (clan.description || '') ||
                        logoFile !== null
 
@@ -114,10 +128,14 @@ export function ClanEditModal({ isOpen, onClose, onSuccess, clan }: ClanEditModa
     setLoading(true)
 
     try {
-      const updates: { name?: string; description?: string; logo_url?: string } = {}
+      const updates: { name?: string; tag?: string; description?: string; logo_url?: string } = {}
 
       if (name !== clan.name) {
         updates.name = name
+      }
+
+      if (tag !== clan.tag) {
+        updates.tag = tag.toUpperCase()
       }
 
       if (description !== (clan.description || '')) {
@@ -245,16 +263,21 @@ export function ClanEditModal({ isOpen, onClose, onSuccess, clan }: ClanEditModa
             />
           </div>
 
-          {/* Tag (read-only) */}
+          {/* Tag */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Clan Tag <span className="text-gray-500">(cannot be changed)</span>
+            <label htmlFor="clanTag" className="block text-sm font-medium text-gray-300 mb-2">
+              Clan Tag <span className="text-gray-500">(2-5 characters)</span>
             </label>
             <input
+              id="clanTag"
               type="text"
-              value={clan.tag}
-              disabled
-              className="input-field opacity-50 cursor-not-allowed"
+              value={tag}
+              onChange={(e) => setTag(e.target.value.toUpperCase())}
+              className="input-field uppercase"
+              placeholder="TAG"
+              minLength={2}
+              maxLength={5}
+              required
             />
           </div>
 

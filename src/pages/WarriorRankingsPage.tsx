@@ -132,7 +132,7 @@ export function WarriorRankingsPage() {
               <tr className="bg-dark-700/50">
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Rank</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Warrior</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Clan</th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-400">Clan</th>
                 <th className="px-4 py-3 text-center text-sm font-semibold text-gray-400">Streak</th>
                 <th className="px-4 py-3 text-center text-sm font-semibold text-gray-400">Inactive</th>
                 <th className="px-4 py-3 text-center text-sm font-semibold text-gray-400">Points</th>
@@ -232,14 +232,14 @@ function WarriorRow({ warrior, rank }: WarriorRowProps) {
         </div>
       </td>
 
-      {/* Clan */}
-      <td className="px-4 py-3">
-        {warrior.clan ? (
+      {/* Clan Tag */}
+      <td className="px-4 py-3 text-center">
+        {warrior.clan_tag ? (
           <Link
-            to={`/clan/${warrior.clan.id}`}
-            className="text-accent-primary hover:underline"
+            to={warrior.clan ? `/clan/${warrior.clan.id}` : '#'}
+            className="px-2 py-1 bg-accent-primary/20 text-accent-primary rounded font-semibold text-sm hover:bg-accent-primary/30 transition-colors"
           >
-            [{warrior.clan_tag}]
+            {warrior.clan_tag}
           </Link>
         ) : (
           <span className="text-gray-500">-</span>
