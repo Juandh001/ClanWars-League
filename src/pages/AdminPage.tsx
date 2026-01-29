@@ -10,9 +10,7 @@ import {
   Search,
   AlertTriangle,
   History,
-  Zap,
   UserX,
-  Ban,
   RefreshCw,
   Calendar,
   Play,
@@ -41,7 +39,7 @@ export function AdminPage() {
     deleteClan,
     removePlayerFromClan,
     adjustClanPoints,
-    adjustPowerWins,
+    adjustWarriorPoints,
     setUserRole,
     loading: actionLoading
   } = useAdmin()
@@ -57,8 +55,8 @@ export function AdminPage() {
   const [selectedUser, setSelectedUser] = useState<any>(null)
   const [pointsChange, setPointsChange] = useState('')
   const [pointsReason, setPointsReason] = useState('')
-  const [isPowerWins, setIsPowerWins] = useState(false)
   const [newSeasonName, setNewSeasonName] = useState('')
+  const [adjustingUser, setAdjustingUser] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -91,26 +89,30 @@ export function AdminPage() {
   )
 
   const handleAdjustPoints = async () => {
-    if (!selectedClan || !pointsChange || !pointsReason) return
+    if ((!selectedClan && !selectedUser) || !pointsChange || !pointsReason) return
 
     setError('')
     const change = parseInt(pointsChange)
 
     let result
-    if (isPowerWins) {
-      result = await adjustPowerWins(selectedClan.id, change, pointsReason)
-    } else {
+    if (adjustingUser && selectedUser) {
+      result = await adjustWarriorPoints(selectedUser.id, change, pointsReason)
+    } else if (selectedClan) {
       result = await adjustClanPoints(selectedClan.id, change, pointsReason)
+    } else {
+      return
     }
 
     if (result.error) {
       setError(result.error.message)
     } else {
-      setSuccess(`Successfully adjusted ${isPowerWins ? 'power wins' : 'points'} for ${selectedClan.name}`)
+      setSuccess(`Successfully adjusted points for ${adjustingUser ? selectedUser?.nickname : selectedClan?.name}`)
       setShowPointsModal(false)
       setPointsChange('')
       setPointsReason('')
       setSelectedClan(null)
+      setSelectedUser(null)
+      setAdjustingUser(false)
       refetch()
       setTimeout(() => setSuccess(''), 3000)
     }
@@ -167,9 +169,17 @@ export function AdminPage() {
     }
   }
 
-  const openPointsModal = (clan: any, powerWins: boolean = false) => {
+  const openPointsModal = (clan: any) => {
     setSelectedClan(clan)
-    setIsPowerWins(powerWins)
+    setSelectedUser(null)
+    setAdjustingUser(false)
+    setShowPointsModal(true)
+  }
+
+  const openUserPointsModal = (user: any) => {
+    setSelectedUser(user)
+    setSelectedClan(null)
+    setAdjustingUser(true)
     setShowPointsModal(true)
   }
 
@@ -302,7 +312,6 @@ export function AdminPage() {
                     <th className="table-header">Clan</th>
                     <th className="table-header text-center">Members</th>
                     <th className="table-header text-center">Points</th>
-                    <th className="table-header text-center">Power Wins</th>
                     <th className="table-header text-center">W/L</th>
                     <th className="table-header text-right">Actions</th>
                   </tr>
@@ -322,16 +331,10 @@ export function AdminPage() {
                         </div>
                       </td>
                       <td className="table-cell text-center text-gray-400">
-                        ?/10
+                        {(clan as any).member_count || 0}/10
                       </td>
                       <td className="table-cell text-center">
                         <span className="text-accent-primary font-bold">{clan.points}</span>
-                      </td>
-                      <td className="table-cell text-center">
-                        <span className="text-accent-warning font-bold flex items-center justify-center gap-1">
-                          <Zap className="w-3 h-3" />
-                          {clan.power_wins}
-                        </span>
                       </td>
                       <td className="table-cell text-center">
                         <span className="text-accent-success">{clan.matches_won}</span>
@@ -341,18 +344,11 @@ export function AdminPage() {
                       <td className="table-cell">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => openPointsModal(clan, false)}
+                            onClick={() => openPointsModal(clan)}
                             className="p-2 text-accent-primary hover:bg-accent-primary/20 rounded-lg transition-colors"
                             title="Adjust Points"
                           >
                             <Plus className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => openPointsModal(clan, true)}
-                            className="p-2 text-accent-warning hover:bg-accent-warning/20 rounded-lg transition-colors"
-                            title="Adjust Power Wins"
-                          >
-                            <Zap className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => openDeleteClanModal(clan)}
@@ -422,6 +418,13 @@ export function AdminPage() {
                       </td>
                       <td className="table-cell">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => openUserPointsModal(user)}
+                            className="p-2 text-accent-primary hover:bg-accent-primary/20 rounded-lg transition-colors"
+                            title="Adjust Points"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => handleToggleAdmin(user.id, user.role, user.nickname)}
                             className={`p-2 rounded-lg transition-colors ${
@@ -638,32 +641,35 @@ export function AdminPage() {
         onClose={() => {
           setShowPointsModal(false)
           setSelectedClan(null)
+          setSelectedUser(null)
+          setAdjustingUser(false)
           setPointsChange('')
           setPointsReason('')
           setError('')
         }}
-        title={`Adjust ${isPowerWins ? 'Power Wins' : 'Points'} - ${selectedClan?.name || ''}`}
+        title={`Adjust Points - ${adjustingUser ? selectedUser?.nickname : selectedClan?.name || ''}`}
       >
         <div className="space-y-4">
           {error && <Alert type="error" message={error} />}
 
           <div className="bg-dark-700/50 rounded-lg p-4 text-center">
             <p className="text-sm text-gray-400 mb-1">
-              Current {isPowerWins ? 'Power Wins' : 'Points'}
+              Current Points
             </p>
             <p className="text-3xl font-bold text-accent-primary">
-              {isPowerWins ? selectedClan?.power_wins : selectedClan?.points}
+              {adjustingUser ? selectedUser?.warrior_points || 0 : selectedClan?.points}
             </p>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Change Amount <span className="text-gray-500">(use negative to subtract)</span>
+              Change Amount
             </label>
             <div className="flex gap-2">
               <button
-                onClick={() => setPointsChange('-1')}
+                onClick={() => setPointsChange(String((parseInt(pointsChange) || 0) - 1))}
                 className="btn-secondary px-4"
+                title="Decrease by 1"
               >
                 <Minus className="w-4 h-4" />
               </button>
@@ -675,12 +681,16 @@ export function AdminPage() {
                 placeholder="0"
               />
               <button
-                onClick={() => setPointsChange('+1')}
-                className="btn-secondary px-4"
+                onClick={() => setPointsChange(String((parseInt(pointsChange) || 0) + 1))}
+                className="btn-primary px-4"
+                title="Increase by 1"
               >
                 <Plus className="w-4 h-4" />
               </button>
             </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Positive = add points, Negative = subtract points
+            </p>
           </div>
 
           <div>

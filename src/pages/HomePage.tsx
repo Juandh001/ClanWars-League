@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Trophy,
-  Zap,
   TrendingUp,
   Crown,
   Medal,
@@ -60,8 +59,7 @@ export function HomePage() {
   const stats = useMemo(() => ({
     totalClans: rankings.length,
     totalWarriors: warriors.length,
-    totalMatches: Math.floor(rankings.reduce((acc, c) => acc + c.matches_played, 0) / 2),
-    totalPowerWins: rankings.reduce((acc, c) => acc + c.power_wins, 0)
+    totalMatches: Math.floor(rankings.reduce((acc, c) => acc + c.matches_played, 0) / 2)
   }), [rankings, warriors])
 
   return (
@@ -130,16 +128,6 @@ export function HomePage() {
             <p className="text-gray-400 text-xs md:text-sm">Matches</p>
           </div>
         </div>
-
-        <div className="card p-4 md:p-6 flex items-center gap-3">
-          <div className="p-2 md:p-3 bg-accent-warning/20 rounded-xl">
-            <Zap className="w-5 h-5 md:w-6 md:h-6 text-accent-warning" />
-          </div>
-          <div>
-            <p className="text-xl md:text-2xl font-bold">{stats.totalPowerWins}</p>
-            <p className="text-gray-400 text-xs md:text-sm">Power Wins</p>
-          </div>
-        </div>
       </div>
 
       {/* Two Tables Side by Side */}
@@ -179,9 +167,6 @@ export function HomePage() {
                       <Flame className="w-4 h-4 text-orange-400 mx-auto" />
                     </th>
                     <th className="table-header text-center">W-L</th>
-                    <th className="table-header text-center">
-                      <Zap className="w-4 h-4 text-accent-warning mx-auto" />
-                    </th>
                     <th className="table-header text-center">Pts</th>
                   </tr>
                 </thead>
@@ -236,9 +221,6 @@ export function HomePage() {
                       <Flame className="w-4 h-4 text-orange-400 mx-auto" />
                     </th>
                     <th className="table-header text-center">W-L</th>
-                    <th className="table-header text-center">
-                      <Zap className="w-4 h-4 text-accent-warning mx-auto" />
-                    </th>
                     <th className="table-header text-center">Pts</th>
                   </tr>
                 </thead>
@@ -268,10 +250,6 @@ export function HomePage() {
         <div className="flex items-center gap-2">
           <span className="text-accent-success">W</span>-<span className="text-accent-danger">L</span>
           <span>= Wins-Losses</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Zap className="w-4 h-4 text-accent-warning" />
-          <span>Power Wins</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="font-semibold">Pts</span> = Points
@@ -337,11 +315,6 @@ function ClanRankRow({
         <span className="text-accent-success">{clan.matches_won}</span>
         <span className="text-gray-500">-</span>
         <span className="text-accent-danger">{clan.matches_lost}</span>
-      </td>
-      <td className="table-cell text-center">
-        <span className="flex items-center justify-center gap-1 text-accent-warning text-sm">
-          {clan.power_wins}
-        </span>
       </td>
       <td className="table-cell text-center">
         <span className="px-2 py-0.5 bg-accent-primary/20 text-accent-primary font-bold rounded-full text-sm">
@@ -418,11 +391,6 @@ function WarriorRankRow({
         <span className="text-accent-success">{warrior.warrior_wins || 0}</span>
         <span className="text-gray-500">-</span>
         <span className="text-accent-danger">{warrior.warrior_losses || 0}</span>
-      </td>
-      <td className="table-cell text-center">
-        <span className="flex items-center justify-center gap-1 text-accent-warning text-sm">
-          {warrior.warrior_power_wins || 0}
-        </span>
       </td>
       <td className="table-cell text-center">
         <span className="font-bold text-accent-primary text-sm">{warrior.warrior_points || 0}</span>

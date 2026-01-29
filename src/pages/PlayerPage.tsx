@@ -3,7 +3,6 @@ import { useParams, Link } from 'react-router-dom'
 import {
   User,
   Trophy,
-  Zap,
   Clock,
   Calendar,
   Shield,
@@ -173,16 +172,6 @@ export function PlayerPage() {
 
         <div className="card p-6">
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-accent-warning/20 rounded-lg">
-              <Zap className="w-5 h-5 text-accent-warning" />
-            </div>
-            <span className="text-gray-400 text-sm">Power Wins</span>
-          </div>
-          <p className="text-3xl font-bold text-accent-warning">{profile.warrior_power_wins || 0}</p>
-        </div>
-
-        <div className="card p-6">
-          <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-orange-500/20 rounded-lg">
               <Flame className="w-5 h-5 text-orange-400" />
             </div>
@@ -285,9 +274,6 @@ export function PlayerPage() {
                           }`}
                         >
                           {isWin ? 'WIN' : 'LOSS'}
-                          {match.power_win && isWin && (
-                            <Zap className="w-3 h-3" />
-                          )}
                         </span>
                       </td>
                       <td className="table-cell">

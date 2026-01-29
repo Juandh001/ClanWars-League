@@ -149,7 +149,6 @@ export function useClanActions() {
         logo_url,
         captain_id: user.id,
         points: 0,
-        power_wins: 0,
         matches_played: 0,
         matches_won: 0,
         matches_lost: 0

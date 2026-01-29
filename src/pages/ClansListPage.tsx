@@ -5,7 +5,6 @@ import {
   Plus,
   Search,
   Trophy,
-  Zap,
   Crown,
   Camera
 } from 'lucide-react'
@@ -220,7 +219,7 @@ export function ClansListPage() {
               </div>
 
               {/* Stats */}
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+              <div className="mt-4 grid grid-cols-2 gap-2 text-center">
                 <div className="bg-dark-700/50 rounded-lg py-2">
                   <p className="text-lg font-bold text-accent-primary">{clan.points}</p>
                   <p className="text-xs text-gray-500">Points</p>
@@ -228,13 +227,6 @@ export function ClansListPage() {
                 <div className="bg-dark-700/50 rounded-lg py-2">
                   <p className="text-lg font-bold text-accent-success">{clan.matches_won}</p>
                   <p className="text-xs text-gray-500">Wins</p>
-                </div>
-                <div className="bg-dark-700/50 rounded-lg py-2">
-                  <p className="text-lg font-bold text-accent-warning flex items-center justify-center gap-1">
-                    <Zap className="w-3 h-3" />
-                    {clan.power_wins}
-                  </p>
-                  <p className="text-xs text-gray-500">PW</p>
                 </div>
               </div>
             </Link>

@@ -92,8 +92,7 @@ export function HallOfFamePage() {
                       stats={{
                         points: champion.points,
                         wins: champion.matches_won,
-                        losses: champion.matches_lost,
-                        powerWins: champion.power_wins
+                        losses: champion.matches_lost
                       }}
                     />
                   ))}
@@ -125,8 +124,7 @@ export function HallOfFamePage() {
                       stats={{
                         points: champion.points,
                         wins: champion.wins,
-                        losses: champion.losses,
-                        powerWins: champion.power_wins
+                        losses: champion.losses
                       }}
                     />
                   ))}
@@ -321,7 +319,6 @@ interface ChampionCardProps {
     points: number
     wins: number
     losses: number
-    powerWins: number
   }
 }
 
@@ -355,7 +352,6 @@ function ChampionCard({ rank, name, tag, subtitle, linkTo, stats }: ChampionCard
           <div className="flex items-center gap-4 mt-1 text-sm text-gray-400">
             <span className="text-accent-primary font-semibold">{stats.points} pts</span>
             <span>{stats.wins}W-{stats.losses}L</span>
-            <span className="text-accent-warning">{stats.powerWins} PW</span>
           </div>
         </div>
       </div>

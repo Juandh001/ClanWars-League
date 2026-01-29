@@ -62,7 +62,6 @@ export function usePlayerStats(userId: string | undefined) {
     totalMatches: number
     wins: number
     losses: number
-    powerWins: number
     clansHistory: { clan_id: string; clan_name: string; joined_at: string; left_at?: string }[]
   } | null>(null)
   const [matches, setMatches] = useState<MatchWithClans[]>([])
@@ -88,7 +87,6 @@ export function usePlayerStats(userId: string | undefined) {
         totalMatches: 0,
         wins: 0,
         losses: 0,
-        powerWins: 0,
         clansHistory: []
       })
       setMatches([])
@@ -120,15 +118,11 @@ export function usePlayerStats(userId: string | undefined) {
 
       const wins = formattedMatches.filter(m => m.winner_clan_id === memberData.clan_id).length
       const losses = formattedMatches.filter(m => m.loser_clan_id === memberData.clan_id).length
-      const powerWins = formattedMatches.filter(
-        m => m.winner_clan_id === memberData.clan_id && m.power_win
-      ).length
 
       setStats({
         totalMatches: wins + losses,
         wins,
         losses,
-        powerWins,
         clansHistory: [] // Could be expanded with clan history tracking
       })
     }

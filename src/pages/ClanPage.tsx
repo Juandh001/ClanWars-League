@@ -3,7 +3,6 @@ import { useParams, Link } from 'react-router-dom'
 import {
   Users,
   Trophy,
-  Zap,
   Crown,
   Shield,
   UserPlus,
@@ -205,13 +204,6 @@ export function ClanPage() {
                 <p className="text-sm text-gray-400">Losses</p>
               </div>
               <div className="bg-dark-700/50 rounded-xl p-4">
-                <p className="text-2xl font-bold text-accent-warning flex items-center gap-1">
-                  <Zap className="w-5 h-5" />
-                  {clan.power_wins}
-                </p>
-                <p className="text-sm text-gray-400">Power Wins</p>
-              </div>
-              <div className="bg-dark-700/50 rounded-xl p-4">
                 <div className="text-2xl font-bold">
                   <StreakIndicator
                     winStreak={clan.current_win_streak || 0}
@@ -361,12 +353,6 @@ export function ClanPage() {
                         >
                           {isWin ? 'Victory' : 'Defeat'}
                         </span>
-                        {match.power_win && isWin && (
-                          <span className="flex items-center gap-1 text-xs text-accent-warning">
-                            <Zap className="w-3 h-3" />
-                            Power Win
-                          </span>
-                        )}
                       </div>
                       <p className="font-medium">
                         vs{' '}

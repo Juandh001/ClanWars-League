@@ -179,10 +179,10 @@ export function useAdmin() {
     return { error }
   }
 
-  // Adjust power wins
-  const adjustPowerWins = async (
-    clanId: string,
-    powerWinsChange: number,
+  // Adjust warrior points
+  const adjustWarriorPoints = async (
+    userId: string,
+    pointsChange: number,
     reason: string
   ) => {
     if (!isAdmin || !isSupabaseConfigured()) {
@@ -191,30 +191,30 @@ export function useAdmin() {
 
     setLoading(true)
 
-    const { data: clan, error: fetchError } = await supabase
-      .from('clans')
-      .select('power_wins, name')
-      .eq('id', clanId)
+    const { data: profile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('warrior_points, nickname')
+      .eq('id', userId)
       .single()
 
-    if (fetchError || !clan) {
+    if (fetchError || !profile) {
       setLoading(false)
-      return { error: fetchError || new Error('Clan not found') }
+      return { error: fetchError || new Error('User not found') }
     }
 
-    const newPowerWins = Math.max(0, clan.power_wins + powerWinsChange)
+    const newPoints = Math.max(0, (profile.warrior_points || 0) + pointsChange)
 
     const { error } = await supabase
-      .from('clans')
-      .update({ power_wins: newPowerWins })
-      .eq('id', clanId)
+      .from('profiles')
+      .update({ warrior_points: newPoints })
+      .eq('id', userId)
 
     if (!error) {
-      await logAction('adjust_power_wins', 'clan', clanId, {
-        clan_name: clan.name,
-        previous_power_wins: clan.power_wins,
-        new_power_wins: newPowerWins,
-        change: powerWinsChange,
+      await logAction('adjust_warrior_points', 'user', userId, {
+        nickname: profile.nickname,
+        previous_points: profile.warrior_points || 0,
+        new_points: newPoints,
+        change: pointsChange,
         reason
       })
     }
@@ -260,7 +260,7 @@ export function useAdmin() {
     deleteClan,
     removePlayerFromClan,
     adjustClanPoints,
-    adjustPowerWins,
+    adjustWarriorPoints,
     setUserRole
   }
 }
@@ -288,13 +288,22 @@ export function useAdminData() {
 
     setUsers(usersData || [])
 
-    // Fetch all clans
+    // Fetch all clans with member count
     const { data: clansData } = await supabase
       .from('clans')
-      .select('*')
+      .select(`
+        *,
+        clan_members(count)
+      `)
       .order('points', { ascending: false })
 
-    setClans(clansData || [])
+    // Map clans to include member_count
+    const clansWithCount = (clansData || []).map((clan: any) => ({
+      ...clan,
+      member_count: clan.clan_members?.[0]?.count || 0
+    }))
+
+    setClans(clansWithCount)
 
     // Fetch recent admin actions
     const { data: actionsData } = await supabase

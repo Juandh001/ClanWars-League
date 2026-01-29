@@ -3,7 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type { Match, MatchWithClans, Clan, MatchMode, Profile } from '../types/database'
 import { useAuth } from '../contexts/AuthContext'
 
-// Power Points (PP) Configuration
+// Points Configuration
 const BASE_POINTS_WIN = 100
 const BASE_POINTS_LOSS = 0 // No penalty for losing
 
@@ -24,8 +24,8 @@ export function getPlayersPerTeam(mode: MatchMode): number {
   return parseInt(mode.charAt(0))
 }
 
-// Calculate Power Points based on match format
-export function calculatePowerPoints(
+// Calculate match points based on format
+export function calculateMatchPoints(
   matchMode: MatchMode,
   isWin: boolean
 ): { points: number; multiplier: number; basePoints: number } {
@@ -176,8 +176,8 @@ export function useReportMatch() {
 
     setSubmitting(true)
 
-    // Calculate Power Points based on match format
-    const { points: pointsAwarded, multiplier } = calculatePowerPoints(matchMode, true)
+    // Calculate points based on match format
+    const { points: pointsAwarded, multiplier } = calculateMatchPoints(matchMode, true)
 
     // Create the match record (scores are automatic: winner=1, loser=0)
     const { data: matchData, error: matchError } = await supabase
@@ -189,8 +189,6 @@ export function useReportMatch() {
         winner_score: 1,
         loser_score: 0,
         points_awarded: pointsAwarded,
-        power_win: false,
-        power_points_bonus: 0,
         match_mode: matchMode,
         notes
       })
@@ -225,7 +223,7 @@ export function useReportMatch() {
     // Update winner clan stats (direct update for reliability)
     const { data: currentWinner } = await supabase
       .from('clans')
-      .select('points, power_wins, matches_played, matches_won, current_win_streak, current_loss_streak, max_win_streak')
+      .select('points, matches_played, matches_won, current_win_streak, current_loss_streak, max_win_streak')
       .eq('id', winnerClanId)
       .single()
 
@@ -295,7 +293,6 @@ export function useRankings() {
       .from('clans')
       .select('*')
       .order('points', { ascending: false })
-      .order('power_wins', { ascending: false })
       .order('matches_won', { ascending: false })
 
     if (fetchError) {

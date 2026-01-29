@@ -6,7 +6,6 @@ import {
   Medal,
   Award,
   Search,
-  Zap,
   Swords,
   TrendingUp
 } from 'lucide-react'
@@ -48,8 +47,7 @@ export function WarriorRankingsPage() {
   const stats = useMemo(() => {
     return {
       totalWarriors: warriors.length,
-      totalGames: warriors.reduce((sum, w) => sum + w.total_games, 0),
-      totalPowerWins: warriors.reduce((sum, w) => sum + (w.warrior_power_wins || 0), 0)
+      totalGames: warriors.reduce((sum, w) => sum + w.total_games, 0)
     }
   }, [warriors])
 
@@ -124,17 +122,6 @@ export function WarriorRankingsPage() {
             </div>
           </div>
         </div>
-        <div className="card p-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-accent-warning/20 rounded-xl">
-              <Zap className="w-6 h-6 text-accent-warning" />
-            </div>
-            <div>
-              <p className="text-3xl font-bold">{stats.totalPowerWins}</p>
-              <p className="text-gray-400 text-sm">Power Wins</p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Rankings Table */}
@@ -146,7 +133,6 @@ export function WarriorRankingsPage() {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Rank</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Warrior</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-400">Clan</th>
-                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-400">PW</th>
                 <th className="px-4 py-3 text-center text-sm font-semibold text-gray-400">Streak</th>
                 <th className="px-4 py-3 text-center text-sm font-semibold text-gray-400">Inactive</th>
                 <th className="px-4 py-3 text-center text-sm font-semibold text-gray-400">Points</th>
@@ -261,13 +247,6 @@ function WarriorRow({ warrior, rank }: WarriorRowProps) {
       </td>
 
       {/* Power Wins */}
-      <td className="px-4 py-3 text-center">
-        <span className="flex items-center justify-center gap-1 text-accent-warning">
-          <Zap className="w-4 h-4" />
-          {warrior.warrior_power_wins || 0}
-        </span>
-      </td>
-
       {/* Streak */}
       <td className="px-4 py-3 text-center">
         <StreakBadge

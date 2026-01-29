@@ -45,7 +45,6 @@ export function useWarriorRankings(seasonId?: string | null) {
         warrior_points: stat.points,
         warrior_wins: stat.wins,
         warrior_losses: stat.losses,
-        warrior_power_wins: stat.power_wins,
         max_win_streak: stat.max_win_streak,
         days_inactive: calculateDaysInactive(stat.profile?.last_seen),
         total_games: stat.matches_played

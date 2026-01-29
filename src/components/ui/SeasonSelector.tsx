@@ -79,8 +79,11 @@ export function SeasonInfo({ season, className = '' }: SeasonInfoProps) {
 
   const startDate = new Date(season.start_date)
   const endDate = new Date(season.end_date)
+  // Use start of day for accurate day calculation
   const now = new Date()
-  const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const endDayStart = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
+  const daysRemaining = Math.max(0, Math.ceil((endDayStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24)))
 
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
