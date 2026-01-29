@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Swords, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react'
+import { Swords, Mail, Lock, User, AlertCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export function RegisterPage() {
@@ -9,7 +9,6 @@ export function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [nickname, setNickname] = useState('')
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
   const { signUp } = useAuth()
   const navigate = useNavigate()
@@ -47,26 +46,9 @@ export function RegisterPage() {
       setError(error.message)
       setLoading(false)
     } else {
-      setSuccess(true)
-      setTimeout(() => navigate('/'), 2000)
+      // User is automatically logged in, redirect immediately
+      navigate('/')
     }
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center">
-        <div className="card p-8 text-center max-w-md">
-          <div className="inline-flex p-4 bg-accent-success/20 rounded-full mb-4">
-            <CheckCircle className="w-12 h-12 text-accent-success" />
-          </div>
-          <h2 className="text-2xl font-display font-bold mb-2">Welcome, Warrior!</h2>
-          <p className="text-gray-400 mb-4">
-            Your account has been created successfully.
-          </p>
-          <p className="text-sm text-gray-500">Redirecting to home...</p>
-        </div>
-      </div>
-    )
   }
 
   return (

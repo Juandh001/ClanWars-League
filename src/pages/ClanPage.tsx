@@ -11,49 +11,79 @@ import {
   Flag,
   Calendar,
   TrendingUp,
-  Clock
+  Clock,
+  Flame,
+  Star,
+  Search,
+  UserCheck
 } from 'lucide-react'
-import { useClan, useClanActions } from '../hooks/useClans'
-import { useMatches } from '../hooks/useMatches'
+import { useClan, useClanActions, useClans, useUserSearch } from '../hooks/useClans'
+import { useMatches, useReportMatch, useClanMembers, MATCH_MODES, getPlayersPerTeam } from '../hooks/useMatches'
+import type { MatchMode } from '../types/database'
+import { useBadges } from '../hooks/useBadges'
 import { useAuth } from '../contexts/AuthContext'
 import { LoadingScreen } from '../components/ui/LoadingSpinner'
 import { StatusIndicator } from '../components/ui/StatusIndicator'
 import { Modal } from '../components/ui/Modal'
 import { Alert } from '../components/ui/Alert'
+import { BadgeDisplay, BadgeSummary } from '../components/ui/BadgeDisplay'
+import { StreakIndicator } from '../components/ui/StreakIndicator'
 import { format } from 'date-fns'
 
 export function ClanPage() {
   const { id } = useParams<{ id: string }>()
   const { clan, loading, refetch } = useClan(id)
   const { matches } = useMatches(id)
+  const { badges } = useBadges(id, 'clan')
   const { user, clan: userClan } = useAuth()
-  const { inviteMember, kickMember } = useClanActions()
+  const { inviteMemberByNickname, kickMember } = useClanActions()
+  const { results: searchResults, loading: searchLoading, searchUsers, clearResults } = useUserSearch()
 
   const [showInviteModal, setShowInviteModal] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteNickname, setInviteNickname] = useState('')
+  const [selectedUser, setSelectedUser] = useState<{ id: string; nickname: string } | null>(null)
   const [inviteLoading, setInviteLoading] = useState(false)
   const [inviteError, setInviteError] = useState('')
   const [inviteSuccess, setInviteSuccess] = useState(false)
+  const [invitedName, setInvitedName] = useState('')
 
   const [showReportModal, setShowReportModal] = useState(false)
 
   const isCaptain = user && clan?.captain_id === user.id
   const isMember = user && clan?.members.some(m => m.user_id === user.id)
 
+  const handleSearchChange = (value: string) => {
+    setInviteNickname(value)
+    setSelectedUser(null)
+    if (value.length >= 2) {
+      searchUsers(value)
+    } else {
+      clearResults()
+    }
+  }
+
+  const handleSelectUser = (user: { id: string; nickname: string }) => {
+    setSelectedUser(user)
+    setInviteNickname(user.nickname)
+    clearResults()
+  }
+
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!clan) return
+    if (!clan || !inviteNickname) return
 
     setInviteLoading(true)
     setInviteError('')
 
-    const { error } = await inviteMember(clan.id, inviteEmail)
+    const { error, invitedUser } = await inviteMemberByNickname(clan.id, inviteNickname)
 
     if (error) {
       setInviteError(error.message)
     } else {
+      setInvitedName(invitedUser?.nickname || inviteNickname)
       setInviteSuccess(true)
-      setInviteEmail('')
+      setInviteNickname('')
+      setSelectedUser(null)
       setTimeout(() => {
         setShowInviteModal(false)
         setInviteSuccess(false)
@@ -107,7 +137,12 @@ export function ClanPage() {
           <div className="flex-1">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-display font-bold mb-1">{clan.name}</h1>
+                <div className="flex items-center gap-3 mb-1">
+                  <h1 className="text-3xl font-display font-bold">{clan.name}</h1>
+                  {badges.length > 0 && (
+                    <BadgeDisplay badges={badges} size="md" showSeasonInfo />
+                  )}
+                </div>
                 <p className="text-gray-400 text-sm">[{clan.tag}]</p>
                 {clan.description && (
                   <p className="text-gray-400 mt-3 max-w-xl">{clan.description}</p>
@@ -140,7 +175,7 @@ export function ClanPage() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mt-6">
               <div className="bg-dark-700/50 rounded-xl p-4">
                 <p className="text-2xl font-bold text-accent-primary">{clan.points}</p>
                 <p className="text-sm text-gray-400">Points</p>
@@ -161,10 +196,33 @@ export function ClanPage() {
                 <p className="text-sm text-gray-400">Power Wins</p>
               </div>
               <div className="bg-dark-700/50 rounded-xl p-4">
+                <div className="text-2xl font-bold">
+                  <StreakIndicator
+                    winStreak={clan.current_win_streak || 0}
+                    lossStreak={clan.current_loss_streak || 0}
+                    maxStreak={clan.max_win_streak || 0}
+                    showMax
+                    size="lg"
+                  />
+                </div>
+                <p className="text-sm text-gray-400">Streak</p>
+              </div>
+              <div className="bg-dark-700/50 rounded-xl p-4">
                 <p className="text-2xl font-bold text-white">{winRate}%</p>
                 <p className="text-sm text-gray-400">Win Rate</p>
               </div>
             </div>
+
+            {/* Achievements */}
+            {badges.length > 0 && (
+              <div className="mt-6 p-4 bg-gradient-to-r from-yellow-500/10 to-transparent rounded-xl border border-yellow-500/20">
+                <div className="flex items-center gap-2 mb-3">
+                  <Star className="w-5 h-5 text-yellow-400" />
+                  <h3 className="font-semibold text-yellow-400">Season Achievements</h3>
+                </div>
+                <BadgeSummary badges={badges} />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -321,33 +379,113 @@ export function ClanPage() {
           setShowInviteModal(false)
           setInviteError('')
           setInviteSuccess(false)
+          setInviteNickname('')
+          setSelectedUser(null)
+          clearResults()
         }}
         title="Invite Player"
       >
         {inviteSuccess ? (
-          <Alert type="success" message="Invitation sent successfully!" />
+          <div className="text-center py-4">
+            <div className="inline-flex p-3 bg-accent-success/20 rounded-full mb-3">
+              <UserCheck className="w-8 h-8 text-accent-success" />
+            </div>
+            <Alert type="success" message={`Invitation sent to ${invitedName}!`} />
+            <p className="text-gray-400 text-sm mt-2">
+              They will receive a notification to accept or decline.
+            </p>
+          </div>
         ) : (
           <form onSubmit={handleInvite} className="space-y-4">
             <p className="text-gray-400 text-sm">
-              Enter the email address of the player you want to invite.
-              They must have an account with this email to accept.
+              Search for a player by their nickname to send them a clan invitation.
             </p>
 
             {inviteError && <Alert type="error" message={inviteError} />}
 
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Player Email
+                Player Nickname
               </label>
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                className="input-field"
-                placeholder="player@example.com"
-                required
-              />
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={inviteNickname}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="input-field pl-10"
+                  placeholder="Search by nickname..."
+                  required
+                  autoComplete="off"
+                />
+                {searchLoading && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <div className="w-4 h-4 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+
+              {/* Search Results Dropdown */}
+              {searchResults.length > 0 && !selectedUser && (
+                <div className="absolute z-10 w-full mt-1 bg-dark-700 border border-dark-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {searchResults
+                    .filter(u => !clan?.members.some(m => m.user_id === u.id))
+                    .map((user) => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => handleSelectUser({ id: user.id, nickname: user.nickname })}
+                        className="w-full px-4 py-3 text-left hover:bg-dark-600 flex items-center gap-3 transition-colors"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-dark-500 flex items-center justify-center">
+                          <span className="text-sm font-medium">
+                            {user.nickname.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{user.nickname}</p>
+                          <p className="text-xs text-gray-500">
+                            {user.is_online ? (
+                              <span className="text-green-400">Online</span>
+                            ) : (
+                              'Offline'
+                            )}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  {searchResults.filter(u => !clan?.members.some(m => m.user_id === u.id)).length === 0 && (
+                    <p className="px-4 py-3 text-gray-400 text-sm">
+                      All matching users are already in your clan
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
+
+            {selectedUser && (
+              <div className="bg-dark-700/50 rounded-lg p-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center">
+                  <span className="font-bold">
+                    {selectedUser.nickname.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium">{selectedUser.nickname}</p>
+                  <p className="text-xs text-gray-500">Ready to invite</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedUser(null)
+                    setInviteNickname('')
+                  }}
+                  className="p-1 text-gray-400 hover:text-white"
+                >
+                  <UserMinus className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
             <div className="flex gap-3 justify-end">
               <button
@@ -359,10 +497,20 @@ export function ClanPage() {
               </button>
               <button
                 type="submit"
-                disabled={inviteLoading}
-                className="btn-primary"
+                disabled={inviteLoading || !inviteNickname}
+                className="btn-primary flex items-center gap-2"
               >
-                {inviteLoading ? 'Sending...' : 'Send Invitation'}
+                {inviteLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    Send Invitation
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -392,21 +540,65 @@ function ReportLossModal({
   clanId: string
   onSuccess: () => void
 }) {
-  const { useReportMatch } = require('../hooks/useMatches')
-  const { useClans } = require('../hooks/useClans')
-
   const { reportLoss, submitting } = useReportMatch()
   const { clans } = useClans()
 
   const [winnerClanId, setWinnerClanId] = useState('')
+  const [matchMode, setMatchMode] = useState<MatchMode>('5v5')
   const [ourScore, setOurScore] = useState('')
   const [theirScore, setTheirScore] = useState('')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [isPowerWin, setIsPowerWin] = useState(false)
+  const [powerPointsBonus, setPowerPointsBonus] = useState(0)
+
+  // Participant selection
+  const [selectedWinnerPlayers, setSelectedWinnerPlayers] = useState<string[]>([])
+  const [selectedLoserPlayers, setSelectedLoserPlayers] = useState<string[]>([])
+
+  // Fetch members for both teams when winner is selected
+  const { members: winnerMembers, loading: winnerLoading } = useClanMembers(winnerClanId || null)
+  const { members: loserMembers, loading: loserLoading } = useClanMembers(clanId)
 
   const availableClans = clans.filter((c: any) => c.id !== clanId)
+  const playersRequired = getPlayersPerTeam(matchMode)
+
+  // Reset participant selection when winner clan or mode changes
+  const handleWinnerChange = (newWinnerId: string) => {
+    setWinnerClanId(newWinnerId)
+    setSelectedWinnerPlayers([])
+  }
+
+  const handleModeChange = (newMode: MatchMode) => {
+    setMatchMode(newMode)
+    setSelectedWinnerPlayers([])
+    setSelectedLoserPlayers([])
+  }
+
+  const toggleWinnerPlayer = (playerId: string) => {
+    setSelectedWinnerPlayers(prev => {
+      if (prev.includes(playerId)) {
+        return prev.filter(id => id !== playerId)
+      }
+      if (prev.length >= playersRequired) {
+        return prev
+      }
+      return [...prev, playerId]
+    })
+  }
+
+  const toggleLoserPlayer = (playerId: string) => {
+    setSelectedLoserPlayers(prev => {
+      if (prev.includes(playerId)) {
+        return prev.filter(id => id !== playerId)
+      }
+      if (prev.length >= playersRequired) {
+        return prev
+      }
+      return [...prev, playerId]
+    })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -420,27 +612,52 @@ function ReportLossModal({
       return
     }
 
-    const result = await reportLoss(winnerClanId, loserScore, winnerScore, notes || undefined)
+    // Validate participant count
+    if (selectedWinnerPlayers.length !== playersRequired) {
+      setError(`Please select exactly ${playersRequired} players from the winning team`)
+      return
+    }
+    if (selectedLoserPlayers.length !== playersRequired) {
+      setError(`Please select exactly ${playersRequired} players from your team`)
+      return
+    }
+
+    const result = await reportLoss(
+      winnerClanId,
+      loserScore,
+      winnerScore,
+      matchMode,
+      selectedWinnerPlayers,
+      selectedLoserPlayers,
+      notes || undefined
+    )
 
     if (result.error) {
       setError(result.error.message)
     } else {
       setSuccess(true)
       setIsPowerWin(result.isPowerWin || false)
+      setPowerPointsBonus(result.powerPointsBonus || 0)
       setTimeout(() => {
         onClose()
         onSuccess()
         setSuccess(false)
         setWinnerClanId('')
+        setMatchMode('5v5')
         setOurScore('')
         setTheirScore('')
         setNotes('')
+        setSelectedWinnerPlayers([])
+        setSelectedLoserPlayers([])
       }, 2500)
     }
   }
 
+  const selectedWinnerClan = clans.find((c: any) => c.id === winnerClanId)
+  const loserClan = clans.find((c: any) => c.id === clanId)
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Report Match Loss" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Report Match Loss" size="xl">
       {success ? (
         <div className="text-center py-6">
           <div className="inline-flex p-4 bg-accent-success/20 rounded-full mb-4">
@@ -448,11 +665,14 @@ function ReportLossModal({
           </div>
           <h3 className="text-xl font-bold mb-2">Match Reported!</h3>
           <p className="text-gray-400">
-            Rankings have been updated.
-            {isPowerWin && (
+            Rankings and warrior stats have been updated.
+            {(isPowerWin || powerPointsBonus > 0) && (
               <span className="block mt-2 text-accent-warning flex items-center justify-center gap-2">
                 <Zap className="w-4 h-4" />
-                Power Win awarded to opponent (+4 points)
+                {powerPointsBonus > 0
+                  ? `Power Points Bonus: +${powerPointsBonus} (Total: +${3 + powerPointsBonus} points)`
+                  : 'Power Win awarded to opponent (+4 points)'
+                }
               </span>
             )}
           </p>
@@ -461,30 +681,166 @@ function ReportLossModal({
         <form onSubmit={handleSubmit} className="space-y-5">
           <Alert
             type="info"
-            message="Only the losing clan reports the match. This ensures fair play and prevents disputes."
+            message="Only the losing clan reports the match. Select the match mode, participating players, and scores."
           />
 
           {error && <Alert type="error" message={error} />}
 
+          {/* Match Mode Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Match Mode *
+            </label>
+            <div className="grid grid-cols-6 gap-2">
+              {MATCH_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => handleModeChange(mode)}
+                  className={`py-2 px-3 rounded-lg font-medium text-sm transition-all ${
+                    matchMode === mode
+                      ? 'bg-accent-primary text-white'
+                      : 'bg-dark-700 text-gray-400 hover:bg-dark-600'
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Winner Clan Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Winner Clan *
             </label>
             <select
               value={winnerClanId}
-              onChange={(e) => setWinnerClanId(e.target.value)}
+              onChange={(e) => handleWinnerChange(e.target.value)}
               className="input-field"
               required
             >
               <option value="">Select the winning clan...</option>
               {availableClans.map((c: any) => (
                 <option key={c.id} value={c.id}>
-                  [{c.tag}] {c.name}
+                  [{c.tag}] {c.name} ({c.points} pts)
                 </option>
               ))}
             </select>
           </div>
 
+          {/* Participant Selection - Only show when winner is selected */}
+          {winnerClanId && (
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Winner Team Roster */}
+              <div className="bg-dark-700/50 rounded-lg p-4">
+                <h4 className="font-semibold text-accent-success mb-3 flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Trophy className="w-4 h-4" />
+                    Winner Team [{selectedWinnerClan?.tag}]
+                  </span>
+                  <span className="text-xs bg-dark-600 px-2 py-1 rounded">
+                    {selectedWinnerPlayers.length}/{playersRequired}
+                  </span>
+                </h4>
+                {winnerLoading ? (
+                  <p className="text-gray-400 text-sm">Loading players...</p>
+                ) : winnerMembers.length === 0 ? (
+                  <p className="text-gray-400 text-sm">No players found</p>
+                ) : (
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {winnerMembers.map((member) => (
+                      <label
+                        key={member.id}
+                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
+                          selectedWinnerPlayers.includes(member.id)
+                            ? 'bg-accent-success/20 border border-accent-success/50'
+                            : 'bg-dark-600 hover:bg-dark-500'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedWinnerPlayers.includes(member.id)}
+                          onChange={() => toggleWinnerPlayer(member.id)}
+                          className="sr-only"
+                        />
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                          selectedWinnerPlayers.includes(member.id)
+                            ? 'bg-accent-success border-accent-success'
+                            : 'border-gray-500'
+                        }`}>
+                          {selectedWinnerPlayers.includes(member.id) && (
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="text-sm">{member.nickname}</span>
+                        {member.role === 'captain' && (
+                          <Crown className="w-3 h-3 text-yellow-400" />
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Loser Team Roster (Our Team) */}
+              <div className="bg-dark-700/50 rounded-lg p-4">
+                <h4 className="font-semibold text-accent-danger mb-3 flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Our Team [{loserClan?.tag}]
+                  </span>
+                  <span className="text-xs bg-dark-600 px-2 py-1 rounded">
+                    {selectedLoserPlayers.length}/{playersRequired}
+                  </span>
+                </h4>
+                {loserLoading ? (
+                  <p className="text-gray-400 text-sm">Loading players...</p>
+                ) : loserMembers.length === 0 ? (
+                  <p className="text-gray-400 text-sm">No players found</p>
+                ) : (
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {loserMembers.map((member) => (
+                      <label
+                        key={member.id}
+                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
+                          selectedLoserPlayers.includes(member.id)
+                            ? 'bg-accent-danger/20 border border-accent-danger/50'
+                            : 'bg-dark-600 hover:bg-dark-500'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedLoserPlayers.includes(member.id)}
+                          onChange={() => toggleLoserPlayer(member.id)}
+                          className="sr-only"
+                        />
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                          selectedLoserPlayers.includes(member.id)
+                            ? 'bg-accent-danger border-accent-danger'
+                            : 'border-gray-500'
+                        }`}>
+                          {selectedLoserPlayers.includes(member.id) && (
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="text-sm">{member.nickname}</span>
+                        {member.role === 'captain' && (
+                          <Crown className="w-3 h-3 text-yellow-400" />
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Scores */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -516,6 +872,7 @@ function ReportLossModal({
             </div>
           </div>
 
+          {/* Notes */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Notes (optional)
@@ -524,22 +881,23 @@ function ReportLossModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="input-field resize-none"
-              rows={3}
+              rows={2}
               placeholder="Any additional details..."
             />
           </div>
 
+          {/* Points Info */}
           <div className="bg-dark-700/50 rounded-lg p-4">
             <p className="text-sm text-gray-400">
               <strong className="text-white">Points Distribution:</strong>
               <br />
-              Winner: +3 points (or +4 if Power Win)
-              <br />
-              Loser: 0 points
+              Winner: +3 base points + Power Points bonus
               <br />
               <span className="text-accent-warning flex items-center gap-1 mt-2">
                 <Zap className="w-4 h-4" />
-                Power Win: Score difference of 5+ points
+                <span>
+                  <strong>Power Points:</strong> Bonus for beating higher-ranked clans + score diff of 5+
+                </span>
               </span>
             </p>
           </div>
@@ -550,7 +908,7 @@ function ReportLossModal({
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !winnerClanId || selectedWinnerPlayers.length !== playersRequired || selectedLoserPlayers.length !== playersRequired}
               className="btn-danger"
             >
               {submitting ? 'Reporting...' : 'Report Loss'}

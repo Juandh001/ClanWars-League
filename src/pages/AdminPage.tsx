@@ -13,21 +13,29 @@ import {
   Zap,
   UserX,
   Ban,
-  RefreshCw
+  RefreshCw,
+  Calendar,
+  Play,
+  StopCircle,
+  Trophy,
+  Crown
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useAdmin, useAdminData } from '../hooks/useAdmin'
+import { useSeasons, useSeasonActions } from '../hooks/useSeasons'
 import { LoadingScreen, LoadingSpinner } from '../components/ui/LoadingSpinner'
 import { Modal } from '../components/ui/Modal'
 import { Alert } from '../components/ui/Alert'
 import { StatusIndicator } from '../components/ui/StatusIndicator'
 import { format } from 'date-fns'
 
-type AdminTab = 'users' | 'clans' | 'actions'
+type AdminTab = 'users' | 'clans' | 'seasons' | 'actions'
 
 export function AdminPage() {
   const { isAdmin, loading: authLoading } = useAuth()
   const { users, clans, actions, loading, refetch } = useAdminData()
+  const { seasons, loading: seasonsLoading, refetch: refetchSeasons } = useSeasons()
+  const { startNewSeason, closeSeason, loading: seasonActionLoading } = useSeasonActions()
   const {
     deleteUser,
     deleteClan,
@@ -44,13 +52,17 @@ export function AdminPage() {
   // Modal states
   const [showPointsModal, setShowPointsModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showSeasonModal, setShowSeasonModal] = useState(false)
   const [selectedClan, setSelectedClan] = useState<any>(null)
   const [selectedUser, setSelectedUser] = useState<any>(null)
   const [pointsChange, setPointsChange] = useState('')
   const [pointsReason, setPointsReason] = useState('')
   const [isPowerWins, setIsPowerWins] = useState(false)
+  const [newSeasonName, setNewSeasonName] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  const currentSeason = seasons.find(s => s.is_active)
 
   useEffect(() => {
     if (isAdmin) {
@@ -173,9 +185,47 @@ export function AdminPage() {
     setShowDeleteModal(true)
   }
 
+  const handleStartNewSeason = async () => {
+    if (!newSeasonName.trim()) {
+      setError('Please enter a season name')
+      return
+    }
+
+    setError('')
+    const { error } = await startNewSeason(newSeasonName.trim())
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setSuccess(`Season "${newSeasonName}" has been started!`)
+      setShowSeasonModal(false)
+      setNewSeasonName('')
+      refetchSeasons()
+      setTimeout(() => setSuccess(''), 3000)
+    }
+  }
+
+  const handleCloseSeason = async (seasonId: string, seasonName: string) => {
+    if (!confirm(`Are you sure you want to close "${seasonName}"? This will award badges to top 3 clans and warriors.`)) {
+      return
+    }
+
+    setError('')
+    const { error } = await closeSeason(seasonId)
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setSuccess(`Season "${seasonName}" has been closed. Badges awarded!`)
+      refetchSeasons()
+      setTimeout(() => setSuccess(''), 3000)
+    }
+  }
+
   const tabs = [
     { id: 'clans' as AdminTab, label: 'Clans', icon: Swords, count: clans.length },
     { id: 'users' as AdminTab, label: 'Users', icon: Users, count: users.length },
+    { id: 'seasons' as AdminTab, label: 'Seasons', icon: Calendar, count: seasons.length },
     { id: 'actions' as AdminTab, label: 'Action Log', icon: History, count: actions.length }
   ]
 
@@ -224,7 +274,7 @@ export function AdminPage() {
       </div>
 
       {/* Search */}
-      {activeTab !== 'actions' && (
+      {activeTab !== 'actions' && activeTab !== 'seasons' && (
         <div className="relative max-w-md">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
           <input
@@ -399,6 +449,140 @@ export function AdminPage() {
             </div>
           )}
 
+          {/* Seasons Tab */}
+          {activeTab === 'seasons' && (
+            <div className="space-y-6">
+              {/* Current Season Card */}
+              <div className="card p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-accent-primary" />
+                    Current Season
+                  </h3>
+                  <button
+                    onClick={() => setShowSeasonModal(true)}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    Start New Season
+                  </button>
+                </div>
+
+                {currentSeason ? (
+                  <div className="bg-gradient-to-r from-accent-primary/10 to-transparent border border-accent-primary/30 rounded-xl p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-2xl font-bold text-accent-primary">{currentSeason.name}</p>
+                        <p className="text-gray-400 text-sm mt-1">
+                          Season #{currentSeason.number} • Started {format(new Date(currentSeason.start_date), 'MMM d, yyyy')}
+                        </p>
+                        <p className="text-gray-500 text-xs mt-1">
+                          Ends: {format(new Date(currentSeason.end_date), 'MMM d, yyyy')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">
+                          Active
+                        </span>
+                        <button
+                          onClick={() => handleCloseSeason(currentSeason.id, currentSeason.name)}
+                          disabled={seasonActionLoading}
+                          className="btn-danger flex items-center gap-2"
+                        >
+                          <StopCircle className="w-4 h-4" />
+                          End Season
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-dark-700/50 rounded-xl p-8 text-center">
+                    <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-500 opacity-50" />
+                    <p className="text-gray-400">No active season</p>
+                    <p className="text-gray-500 text-sm mt-1">Start a new season to begin tracking stats</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Season History */}
+              <div className="card overflow-hidden">
+                <div className="p-4 border-b border-dark-600">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <History className="w-4 h-4 text-gray-400" />
+                    Season History
+                  </h3>
+                </div>
+
+                {seasonsLoading ? (
+                  <div className="p-8">
+                    <LoadingSpinner />
+                  </div>
+                ) : seasons.length === 0 ? (
+                  <div className="p-12 text-center text-gray-400">
+                    <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No seasons created yet</p>
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead className="bg-dark-700/50">
+                      <tr>
+                        <th className="table-header">#</th>
+                        <th className="table-header">Name</th>
+                        <th className="table-header">Start Date</th>
+                        <th className="table-header">End Date</th>
+                        <th className="table-header text-center">Status</th>
+                        <th className="table-header text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-dark-700">
+                      {seasons.map((season) => (
+                        <tr key={season.id} className="hover:bg-dark-700/30 transition-colors">
+                          <td className="table-cell">
+                            <span className="flex items-center justify-center w-8 h-8 bg-dark-600 rounded-lg font-bold">
+                              {season.number}
+                            </span>
+                          </td>
+                          <td className="table-cell font-semibold">
+                            {season.name}
+                          </td>
+                          <td className="table-cell text-gray-400 text-sm">
+                            {format(new Date(season.start_date), 'MMM d, yyyy')}
+                          </td>
+                          <td className="table-cell text-gray-400 text-sm">
+                            {format(new Date(season.end_date), 'MMM d, yyyy')}
+                          </td>
+                          <td className="table-cell text-center">
+                            {season.is_active ? (
+                              <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-medium">
+                                Active
+                              </span>
+                            ) : (
+                              <span className="px-2 py-1 bg-gray-500/20 text-gray-400 rounded-full text-xs font-medium">
+                                Completed
+                              </span>
+                            )}
+                          </td>
+                          <td className="table-cell text-right">
+                            {season.is_active && (
+                              <button
+                                onClick={() => handleCloseSeason(season.id, season.name)}
+                                disabled={seasonActionLoading}
+                                className="p-2 text-accent-danger hover:bg-accent-danger/20 rounded-lg transition-colors"
+                                title="End Season"
+                              >
+                                <StopCircle className="w-4 h-4" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Actions Log Tab */}
           {activeTab === 'actions' && (
             <div className="card overflow-hidden">
@@ -570,6 +754,91 @@ export function AdminPage() {
               className="btn-danger"
             >
               {actionLoading ? 'Deleting...' : 'Delete Permanently'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* New Season Modal */}
+      <Modal
+        isOpen={showSeasonModal}
+        onClose={() => {
+          setShowSeasonModal(false)
+          setNewSeasonName('')
+          setError('')
+        }}
+        title="Start New Season"
+      >
+        <div className="space-y-4">
+          {error && <Alert type="error" message={error} />}
+
+          {currentSeason && (
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 flex items-start gap-3">
+              <AlertTriangle className="w-6 h-6 text-yellow-500 flex-shrink-0" />
+              <div>
+                <p className="text-yellow-400 font-semibold">Active season will be closed</p>
+                <p className="text-sm text-yellow-400/70 mt-1">
+                  "{currentSeason.name}" will be closed and badges will be awarded to top 3 clans and warriors.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Season Name *
+            </label>
+            <input
+              type="text"
+              value={newSeasonName}
+              onChange={(e) => setNewSeasonName(e.target.value)}
+              className="input-field"
+              placeholder="e.g., Season 2 - February 2025"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              This will be Season #{(seasons.length || 0) + 1}
+            </p>
+          </div>
+
+          <div className="bg-dark-700/50 rounded-lg p-4">
+            <p className="text-sm text-gray-400 mb-2">What happens when you start a new season:</p>
+            <ul className="text-xs text-gray-500 space-y-1">
+              <li className="flex items-center gap-2">
+                <Crown className="w-3 h-3 text-yellow-400" />
+                Top 3 clans and warriors get gold/silver/bronze badges
+              </li>
+              <li className="flex items-center gap-2">
+                <Trophy className="w-3 h-3 text-accent-primary" />
+                All stats are preserved in season history
+              </li>
+              <li className="flex items-center gap-2">
+                <RefreshCw className="w-3 h-3 text-accent-success" />
+                Points and streaks reset for the new season
+              </li>
+            </ul>
+          </div>
+
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => setShowSeasonModal(false)}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleStartNewSeason}
+              disabled={!newSeasonName.trim() || seasonActionLoading}
+              className="btn-primary flex items-center gap-2"
+            >
+              {seasonActionLoading ? (
+                'Starting...'
+              ) : (
+                <>
+                  <Play className="w-4 h-4" />
+                  Start Season
+                </>
+              )}
             </button>
           </div>
         </div>

@@ -1,12 +1,52 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import type { Match, MatchWithClans, Clan } from '../types/database'
+import type { Match, MatchWithClans, Clan, MatchMode, Profile } from '../types/database'
 import { useAuth } from '../contexts/AuthContext'
 
 // Points configuration
 const POINTS_FOR_WIN = 3
 const POWER_WIN_BONUS = 1 // Extra point for power win
-const POWER_WIN_THRESHOLD = 5 // Score difference for power win (e.g., 10-5 or higher gap)
+const POWER_WIN_THRESHOLD = 5 // Score difference for power win
+const RANKING_BONUS_DIVISOR = 10 // Points difference divided by this for bonus
+const MAX_RANKING_BONUS = 5 // Maximum ranking-based bonus
+
+// Match mode helpers
+export const MATCH_MODES: MatchMode[] = ['1v1', '2v2', '3v3', '4v4', '5v5', '6v6']
+
+export function getPlayersPerTeam(mode: MatchMode): number {
+  return parseInt(mode.charAt(0))
+}
+
+// Calculate power points bonus based on ranking difference
+export function calculatePowerPointsBonus(
+  winnerPoints: number,
+  loserPoints: number,
+  scoreDifference: number
+): { totalBonus: number; rankingBonus: number; scoreBonus: number; isPowerWin: boolean } {
+  let rankingBonus = 0
+  let scoreBonus = 0
+
+  // Ranking-based bonus: If winner has fewer points than loser (giant killing)
+  if (loserPoints > winnerPoints) {
+    rankingBonus = Math.min(
+      Math.floor((loserPoints - winnerPoints) / RANKING_BONUS_DIVISOR),
+      MAX_RANKING_BONUS
+    )
+  }
+
+  // Score difference bonus (power win)
+  const isPowerWin = scoreDifference >= POWER_WIN_THRESHOLD
+  if (isPowerWin) {
+    scoreBonus = POWER_WIN_BONUS
+  }
+
+  return {
+    totalBonus: rankingBonus + scoreBonus,
+    rankingBonus,
+    scoreBonus,
+    isPowerWin
+  }
+}
 
 export function useMatches(clanId?: string) {
   const [matches, setMatches] = useState<MatchWithClans[]>([])
@@ -60,6 +100,43 @@ export function useMatches(clanId?: string) {
   return { matches, loading, error, refetch: fetchMatches }
 }
 
+// Hook to get clan members for roster selection
+export function useClanMembers(clanId: string | null) {
+  const [members, setMembers] = useState<(Profile & { role: string })[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!clanId || !isSupabaseConfigured()) {
+      setMembers([])
+      return
+    }
+
+    const fetchMembers = async () => {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('clan_members')
+        .select(`
+          role,
+          profile:profiles!clan_members_user_id_fkey(*)
+        `)
+        .eq('clan_id', clanId)
+
+      if (!error && data) {
+        const formattedMembers = data.map((m: any) => ({
+          ...(Array.isArray(m.profile) ? m.profile[0] : m.profile),
+          role: m.role
+        }))
+        setMembers(formattedMembers)
+      }
+      setLoading(false)
+    }
+
+    fetchMembers()
+  }, [clanId])
+
+  return { members, loading }
+}
+
 export function useReportMatch() {
   const { user, clan } = useAuth()
   const [submitting, setSubmitting] = useState(false)
@@ -68,6 +145,9 @@ export function useReportMatch() {
     winnerClanId: string,
     loserScore: number,
     winnerScore: number,
+    matchMode: MatchMode = '5v5',
+    winnerParticipants: string[] = [],
+    loserParticipants: string[] = [],
     notes?: string
   ) => {
     if (!user || !clan || !isSupabaseConfigured()) {
@@ -87,16 +167,23 @@ export function useReportMatch() {
 
     const loserClanId = membership.clan_id
 
-    // Verify the winner clan exists
+    // Verify the winner clan exists and get their points for power points calculation
     const { data: winnerClan, error: winnerError } = await supabase
       .from('clans')
-      .select('id, name')
+      .select('id, name, points')
       .eq('id', winnerClanId)
       .single()
 
     if (winnerError || !winnerClan) {
       return { error: new Error('Winner clan not found') }
     }
+
+    // Get loser clan points
+    const { data: loserClan } = await supabase
+      .from('clans')
+      .select('points')
+      .eq('id', loserClanId)
+      .single()
 
     // Can't report against own clan
     if (winnerClanId === loserClanId) {
@@ -105,12 +192,16 @@ export function useReportMatch() {
 
     setSubmitting(true)
 
-    // Determine if it's a power win (significant score difference)
+    // Calculate power points
     const scoreDifference = winnerScore - loserScore
-    const isPowerWin = scoreDifference >= POWER_WIN_THRESHOLD
+    const { totalBonus, isPowerWin } = calculatePowerPointsBonus(
+      winnerClan.points,
+      loserClan?.points || 0,
+      scoreDifference
+    )
 
-    // Calculate points awarded
-    const pointsAwarded = POINTS_FOR_WIN + (isPowerWin ? POWER_WIN_BONUS : 0)
+    // Calculate total points awarded
+    const pointsAwarded = POINTS_FOR_WIN + totalBonus
 
     // Create the match record
     const { data: matchData, error: matchError } = await supabase
@@ -123,6 +214,8 @@ export function useReportMatch() {
         loser_score: loserScore,
         points_awarded: pointsAwarded,
         power_win: isPowerWin,
+        power_points_bonus: totalBonus,
+        match_mode: matchMode,
         notes
       })
       .select()
@@ -131,6 +224,26 @@ export function useReportMatch() {
     if (matchError) {
       setSubmitting(false)
       return { error: matchError }
+    }
+
+    // Insert match participants if provided
+    if (matchData && (winnerParticipants.length > 0 || loserParticipants.length > 0)) {
+      const participantsToInsert = [
+        ...winnerParticipants.map(userId => ({
+          match_id: matchData.id,
+          user_id: userId,
+          clan_id: winnerClanId,
+          team: 'winner' as const
+        })),
+        ...loserParticipants.map(userId => ({
+          match_id: matchData.id,
+          user_id: userId,
+          clan_id: loserClanId,
+          team: 'loser' as const
+        }))
+      ]
+
+      await supabase.from('match_participants').insert(participantsToInsert)
     }
 
     // Update winner clan stats
@@ -145,18 +258,22 @@ export function useReportMatch() {
       // Fallback: manual update
       const { data: currentWinner } = await supabase
         .from('clans')
-        .select('points, power_wins, matches_played, matches_won')
+        .select('points, power_wins, matches_played, matches_won, current_win_streak, current_loss_streak, max_win_streak')
         .eq('id', winnerClanId)
         .single()
 
       if (currentWinner) {
+        const newWinStreak = currentWinner.current_win_streak + 1
         await supabase
           .from('clans')
           .update({
             points: currentWinner.points + pointsAwarded,
             power_wins: currentWinner.power_wins + (isPowerWin ? 1 : 0),
             matches_played: currentWinner.matches_played + 1,
-            matches_won: currentWinner.matches_won + 1
+            matches_won: currentWinner.matches_won + 1,
+            current_win_streak: newWinStreak,
+            current_loss_streak: 0,
+            max_win_streak: Math.max(currentWinner.max_win_streak, newWinStreak)
           })
           .eq('id', winnerClanId)
       }
@@ -172,7 +289,7 @@ export function useReportMatch() {
       // Fallback: manual update
       const { data: currentLoser } = await supabase
         .from('clans')
-        .select('matches_played, matches_lost')
+        .select('matches_played, matches_lost, current_win_streak, current_loss_streak')
         .eq('id', loserClanId)
         .single()
 
@@ -181,14 +298,16 @@ export function useReportMatch() {
           .from('clans')
           .update({
             matches_played: currentLoser.matches_played + 1,
-            matches_lost: currentLoser.matches_lost + 1
+            matches_lost: currentLoser.matches_lost + 1,
+            current_win_streak: 0,
+            current_loss_streak: currentLoser.current_loss_streak + 1
           })
           .eq('id', loserClanId)
       }
     }
 
     setSubmitting(false)
-    return { error: null, data: matchData, isPowerWin }
+    return { error: null, data: matchData, isPowerWin, powerPointsBonus: totalBonus }
   }
 
   return { reportLoss, submitting }

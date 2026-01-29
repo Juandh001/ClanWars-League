@@ -1,11 +1,19 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Trophy, Zap, TrendingUp, Crown, Medal, Award, Users } from 'lucide-react'
+import { Trophy, Zap, TrendingUp, Crown, Medal, Award, Users, Flame } from 'lucide-react'
 import { useRankings } from '../hooks/useMatches'
+import { useSeasons, useCurrentSeason } from '../hooks/useSeasons'
+import { useBadges } from '../hooks/useBadges'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
+import { SeasonSelector, SeasonInfo } from '../components/ui/SeasonSelector'
+import { StreakBadge } from '../components/ui/StreakIndicator'
+import { BadgeDisplay } from '../components/ui/BadgeDisplay'
 
 export function HomePage() {
   const { rankings, loading } = useRankings()
+  const { seasons } = useSeasons()
+  const { season: currentSeason } = useCurrentSeason()
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null)
 
   const getRankBadge = (rank: number) => {
     if (rank === 1) return <Crown className="w-5 h-5 text-yellow-400" />
@@ -24,14 +32,22 @@ export function HomePage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl md:text-5xl font-display font-bold">
-          <span className="gradient-text">Global Rankings</span>
-        </h1>
-        <p className="text-gray-400 max-w-2xl mx-auto">
-          Compete with the best clans worldwide. Report your matches, climb the leaderboard,
-          and prove your dominance in the arena.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-4xl md:text-5xl font-display font-bold">
+            <span className="gradient-text">Clan Rankings</span>
+          </h1>
+          <SeasonInfo season={currentSeason} className="mt-2" />
+        </div>
+
+        {seasons.length > 0 && (
+          <SeasonSelector
+            seasons={seasons}
+            selectedSeasonId={selectedSeasonId}
+            onSelect={setSelectedSeasonId}
+            showAllTime={false}
+          />
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -102,6 +118,12 @@ export function HomePage() {
                 <tr>
                   <th className="table-header w-16">Rank</th>
                   <th className="table-header">Clan</th>
+                  <th className="table-header text-center">
+                    <span className="flex items-center justify-center gap-1">
+                      <Flame className="w-4 h-4 text-orange-400" />
+                      Streak
+                    </span>
+                  </th>
                   <th className="table-header text-center">PJ</th>
                   <th className="table-header text-center">PG</th>
                   <th className="table-header text-center">PP</th>
@@ -115,57 +137,15 @@ export function HomePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-700">
-                {rankings.map((clan, index) => {
-                  const rank = index + 1
-                  return (
-                    <tr
-                      key={clan.id}
-                      className={`transition-colors ${getRankRowClass(rank)}`}
-                    >
-                      <td className="table-cell">
-                        <div className="flex items-center justify-center">
-                          {getRankBadge(rank)}
-                        </div>
-                      </td>
-                      <td className="table-cell">
-                        <Link
-                          to={`/clan/${clan.id}`}
-                          className="flex items-center gap-3 group"
-                        >
-                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-lg">
-                            <span className="text-sm font-bold">{clan.tag}</span>
-                          </div>
-                          <div>
-                            <p className="font-semibold text-white group-hover:text-accent-primary transition-colors">
-                              {clan.name}
-                            </p>
-                            <p className="text-xs text-gray-500">[{clan.tag}]</p>
-                          </div>
-                        </Link>
-                      </td>
-                      <td className="table-cell text-center text-gray-400">
-                        {clan.matches_played}
-                      </td>
-                      <td className="table-cell text-center text-accent-success font-medium">
-                        {clan.matches_won}
-                      </td>
-                      <td className="table-cell text-center text-accent-danger font-medium">
-                        {clan.matches_lost}
-                      </td>
-                      <td className="table-cell text-center">
-                        <span className="flex items-center justify-center gap-1 text-accent-warning font-medium">
-                          <Zap className="w-3 h-3" />
-                          {clan.power_wins}
-                        </span>
-                      </td>
-                      <td className="table-cell text-center">
-                        <span className="px-3 py-1 bg-accent-primary/20 text-accent-primary font-bold rounded-full">
-                          {clan.points}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
+                {rankings.map((clan, index) => (
+                  <ClanRankRow
+                    key={clan.id}
+                    clan={clan}
+                    rank={index + 1}
+                    getRankBadge={getRankBadge}
+                    getRankRowClass={getRankRowClass}
+                  />
+                ))}
               </tbody>
             </table>
           </div>
@@ -174,6 +154,10 @@ export function HomePage() {
 
       {/* Legend */}
       <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-400">
+        <div className="flex items-center gap-2">
+          <Flame className="w-4 h-4 text-orange-400" />
+          <span className="font-semibold">Streak</span> = Win/Loss Streak
+        </div>
         <div className="flex items-center gap-2">
           <span className="font-semibold">PJ</span> = Played
         </div>
@@ -189,5 +173,77 @@ export function HomePage() {
         </div>
       </div>
     </div>
+  )
+}
+
+// Separate component for clan row to use hooks
+function ClanRankRow({
+  clan,
+  rank,
+  getRankBadge,
+  getRankRowClass
+}: {
+  clan: any
+  rank: number
+  getRankBadge: (rank: number) => React.ReactNode
+  getRankRowClass: (rank: number) => string
+}) {
+  const { badges } = useBadges(clan.id, 'clan')
+
+  return (
+    <tr className={`transition-colors ${getRankRowClass(rank)}`}>
+      <td className="table-cell">
+        <div className="flex items-center justify-center">
+          {getRankBadge(rank)}
+        </div>
+      </td>
+      <td className="table-cell">
+        <Link
+          to={`/clan/${clan.id}`}
+          className="flex items-center gap-3 group"
+        >
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center shadow-lg">
+            <span className="text-sm font-bold">{clan.tag}</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="font-semibold text-white group-hover:text-accent-primary transition-colors">
+                {clan.name}
+              </p>
+              {badges.length > 0 && (
+                <BadgeDisplay badges={badges} size="sm" maxDisplay={3} />
+              )}
+            </div>
+            <p className="text-xs text-gray-500">[{clan.tag}]</p>
+          </div>
+        </Link>
+      </td>
+      <td className="table-cell text-center">
+        <StreakBadge
+          winStreak={clan.current_win_streak || 0}
+          lossStreak={clan.current_loss_streak || 0}
+        />
+      </td>
+      <td className="table-cell text-center text-gray-400">
+        {clan.matches_played}
+      </td>
+      <td className="table-cell text-center text-accent-success font-medium">
+        {clan.matches_won}
+      </td>
+      <td className="table-cell text-center text-accent-danger font-medium">
+        {clan.matches_lost}
+      </td>
+      <td className="table-cell text-center">
+        <span className="flex items-center justify-center gap-1 text-accent-warning font-medium">
+          <Zap className="w-3 h-3" />
+          {clan.power_wins}
+        </span>
+      </td>
+      <td className="table-cell text-center">
+        <span className="px-3 py-1 bg-accent-primary/20 text-accent-primary font-bold rounded-full">
+          {clan.points}
+        </span>
+      </td>
+    </tr>
   )
 }

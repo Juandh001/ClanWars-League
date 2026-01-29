@@ -8,17 +8,23 @@ import {
   Calendar,
   Shield,
   TrendingUp,
-  Award
+  Award,
+  Flame,
+  Star
 } from 'lucide-react'
 import { useProfile, usePlayerStats } from '../hooks/useProfiles'
+import { useBadges } from '../hooks/useBadges'
 import { LoadingScreen } from '../components/ui/LoadingSpinner'
 import { StatusIndicator } from '../components/ui/StatusIndicator'
+import { BadgeDisplay, BadgeSummary } from '../components/ui/BadgeDisplay'
+import { StreakIndicator } from '../components/ui/StreakIndicator'
 import { format } from 'date-fns'
 
 export function PlayerPage() {
   const { id } = useParams<{ id: string }>()
   const { profile, loading: profileLoading } = useProfile(id)
   const { stats, matches, loading: statsLoading } = usePlayerStats(id)
+  const { badges } = useBadges(id, 'warrior')
 
   const loading = profileLoading || statsLoading
 
@@ -66,6 +72,9 @@ export function PlayerPage() {
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-3xl font-display font-bold">{profile.nickname}</h1>
+              {badges.length > 0 && (
+                <BadgeDisplay badges={badges} size="md" showSeasonInfo />
+              )}
               {profile.role === 'admin' && (
                 <span className="px-3 py-1 bg-accent-danger/20 text-accent-danger rounded-full text-xs font-bold">
                   ADMIN
@@ -117,52 +126,89 @@ export function PlayerPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="card p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-accent-primary/20 rounded-lg">
-                <Trophy className="w-5 h-5 text-accent-primary" />
-              </div>
-              <span className="text-gray-400 text-sm">Matches</span>
+      {/* Warrior Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-accent-primary/20 rounded-lg">
+              <Star className="w-5 h-5 text-accent-primary" />
             </div>
-            <p className="text-3xl font-bold">{stats.totalMatches}</p>
+            <span className="text-gray-400 text-sm">Points</span>
           </div>
+          <p className="text-3xl font-bold text-accent-primary">{profile.warrior_points || 0}</p>
+        </div>
 
-          <div className="card p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-accent-success/20 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-accent-success" />
-              </div>
-              <span className="text-gray-400 text-sm">Win Rate</span>
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-accent-success/20 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-accent-success" />
             </div>
-            <p className="text-3xl font-bold text-accent-success">{winRate}%</p>
+            <span className="text-gray-400 text-sm">Win Rate</span>
           </div>
+          <p className="text-3xl font-bold text-accent-success">{winRate}%</p>
+        </div>
 
-          <div className="card p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-accent-warning/20 rounded-lg">
-                <Zap className="w-5 h-5 text-accent-warning" />
-              </div>
-              <span className="text-gray-400 text-sm">Power Wins</span>
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-accent-warning/20 rounded-lg">
+              <Zap className="w-5 h-5 text-accent-warning" />
             </div>
-            <p className="text-3xl font-bold text-accent-warning">{stats.powerWins}</p>
+            <span className="text-gray-400 text-sm">Power Wins</span>
           </div>
+          <p className="text-3xl font-bold text-accent-warning">{profile.warrior_power_wins || 0}</p>
+        </div>
 
-          <div className="card p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-gray-500/20 rounded-lg">
-                <Award className="w-5 h-5 text-gray-400" />
-              </div>
-              <span className="text-gray-400 text-sm">W/L</span>
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-orange-500/20 rounded-lg">
+              <Flame className="w-5 h-5 text-orange-400" />
             </div>
-            <p className="text-3xl font-bold">
-              <span className="text-accent-success">{stats.wins}</span>
-              <span className="text-gray-500">/</span>
-              <span className="text-accent-danger">{stats.losses}</span>
-            </p>
+            <span className="text-gray-400 text-sm">Streak</span>
           </div>
+          <div className="text-2xl font-bold">
+            <StreakIndicator
+              winStreak={profile.current_win_streak || 0}
+              lossStreak={profile.current_loss_streak || 0}
+              maxStreak={profile.max_win_streak || 0}
+              showMax
+              size="lg"
+            />
+          </div>
+        </div>
+
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-gray-500/20 rounded-lg">
+              <Award className="w-5 h-5 text-gray-400" />
+            </div>
+            <span className="text-gray-400 text-sm">W/L</span>
+          </div>
+          <p className="text-3xl font-bold">
+            <span className="text-accent-success">{profile.warrior_wins || 0}</span>
+            <span className="text-gray-500">/</span>
+            <span className="text-accent-danger">{profile.warrior_losses || 0}</span>
+          </p>
+        </div>
+
+        <div className="card p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-accent-primary/20 rounded-lg">
+              <Trophy className="w-5 h-5 text-accent-primary" />
+            </div>
+            <span className="text-gray-400 text-sm">Matches</span>
+          </div>
+          <p className="text-3xl font-bold">{stats?.totalMatches || 0}</p>
+        </div>
+      </div>
+
+      {/* Achievements Section */}
+      {badges.length > 0 && (
+        <div className="card p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Star className="w-5 h-5 text-yellow-400" />
+            <h2 className="text-xl font-display font-bold text-yellow-400">Season Achievements</h2>
+          </div>
+          <BadgeSummary badges={badges} />
         </div>
       )}
 

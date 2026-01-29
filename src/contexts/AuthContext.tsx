@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import type { Profile, Clan, ClanMember } from '../types/database'
+import type { Profile, Clan, ClanRole } from '../types/database'
 import type { User, Session } from '@supabase/supabase-js'
 
 interface AuthContextType {
@@ -52,10 +52,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .from('clan_members')
       .select(`
         role,
-        clan:clans(*)
+        clan:clans!clan_members_clan_id_fkey(*)
       `)
       .eq('user_id', userId)
-      .single()
+      .maybeSingle() as { data: { role: ClanRole; clan: Clan | Clan[] } | null; error: Error | null }
 
     if (memberError || !memberData?.clan) {
       return null
@@ -200,6 +200,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
 
       if (profileError) return { error: profileError }
+
+      // Auto-login after successful registration
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+
+      if (signInError) return { error: signInError }
     }
 
     return { error: null }

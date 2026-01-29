@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Swords,
@@ -10,28 +10,71 @@ import {
   X,
   Shield,
   Bell,
-  Home
+  Star,
+  Check,
+  XCircle,
+  Clock
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { usePendingInvitations } from '../../hooks/useClans'
+import { usePendingInvitations, useClanActions } from '../../hooks/useClans'
 import { StatusIndicator } from '../ui/StatusIndicator'
+import { format } from 'date-fns'
 
 export function Navbar() {
   const { user, profile, clan, isAdmin, signOut } = useAuth()
-  const { invitations } = usePendingInvitations()
+  const { invitations, refetch: refetchInvitations } = usePendingInvitations()
+  const { acceptInvitation, declineInvitation } = useClanActions()
   const location = useLocation()
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [processingId, setProcessingId] = useState<string | null>(null)
+  const notificationRef = useRef<HTMLDivElement>(null)
+
+  // Close notifications dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const handleSignOut = async () => {
     await signOut()
     navigate('/login')
   }
 
+  const handleAcceptInvitation = async (invitationId: string) => {
+    setProcessingId(invitationId)
+    const { error } = await acceptInvitation(invitationId)
+    if (!error) {
+      refetchInvitations()
+      setNotificationsOpen(false)
+      // Reload to update clan info
+      window.location.reload()
+    }
+    setProcessingId(null)
+  }
+
+  const handleDeclineInvitation = async (invitationId: string) => {
+    setProcessingId(invitationId)
+    const { error } = await declineInvitation(invitationId)
+    if (!error) {
+      refetchInvitations()
+    }
+    setProcessingId(null)
+  }
+
   const navLinks = [
-    { to: '/', label: 'Rankings', icon: Trophy },
-    { to: '/clans', label: 'Clans', icon: Users },
-    ...(clan ? [{ to: `/clan/${clan.id}`, label: 'My Clan', icon: Swords }] : []),
+    { to: '/', label: 'Clans', icon: Trophy },
+    { to: '/warriors', label: 'Warriors', icon: Swords },
+    { to: '/clans', label: 'Browse', icon: Users },
+    { to: '/hall-of-fame', label: 'Hall of Fame', icon: Star },
+    ...(clan ? [{ to: `/clan/${clan.id}`, label: 'My Clan', icon: Shield }] : []),
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: Shield }] : [])
   ]
 
@@ -75,18 +118,110 @@ export function Navbar() {
           <div className="flex items-center gap-4">
             {user && profile ? (
               <>
-                {/* Notifications */}
-                {invitations.length > 0 && (
-                  <Link
-                    to="/invitations"
-                    className="relative p-2 text-gray-400 hover:text-white transition-colors"
+                {/* Notifications Dropdown */}
+                <div className="relative" ref={notificationRef}>
+                  <button
+                    onClick={() => setNotificationsOpen(!notificationsOpen)}
+                    className={`relative p-2 rounded-lg transition-colors ${
+                      notificationsOpen
+                        ? 'bg-dark-700 text-white'
+                        : 'text-gray-400 hover:text-white hover:bg-dark-700'
+                    }`}
                   >
                     <Bell className="w-5 h-5" />
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-accent-danger rounded-full text-xs flex items-center justify-center">
-                      {invitations.length}
-                    </span>
-                  </Link>
-                )}
+                    {invitations.length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-accent-danger rounded-full text-xs flex items-center justify-center animate-pulse">
+                        {invitations.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Dropdown */}
+                  {notificationsOpen && (
+                    <div className="absolute right-0 mt-2 w-80 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl shadow-black/50 overflow-hidden z-50">
+                      <div className="p-4 border-b border-dark-600">
+                        <h3 className="font-semibold flex items-center gap-2">
+                          <Bell className="w-4 h-4 text-accent-primary" />
+                          Notifications
+                        </h3>
+                      </div>
+
+                      {invitations.length === 0 ? (
+                        <div className="p-6 text-center text-gray-400">
+                          <Bell className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                          <p className="text-sm">No new notifications</p>
+                        </div>
+                      ) : (
+                        <div className="max-h-96 overflow-y-auto">
+                          {invitations.map((invitation) => (
+                            <div
+                              key={invitation.id}
+                              className="p-4 border-b border-dark-700 hover:bg-dark-700/50 transition-colors"
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-primary to-accent-secondary flex items-center justify-center flex-shrink-0">
+                                  <span className="text-xs font-bold">{invitation.clan?.tag}</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm">
+                                    Clan Invitation
+                                  </p>
+                                  <p className="text-accent-primary text-sm font-semibold truncate">
+                                    {invitation.clan?.name}
+                                  </p>
+                                  <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                                    <Clock className="w-3 h-3" />
+                                    Expires {format(new Date(invitation.expires_at), 'MMM d')}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Action Buttons */}
+                              <div className="flex gap-2 mt-3">
+                                <button
+                                  onClick={() => handleAcceptInvitation(invitation.id)}
+                                  disabled={!!clan || processingId === invitation.id}
+                                  className="flex-1 py-2 px-3 bg-accent-success/20 text-accent-success rounded-lg text-sm font-medium hover:bg-accent-success/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                                >
+                                  {processingId === invitation.id ? (
+                                    <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Check className="w-4 h-4" />
+                                      Accept
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => handleDeclineInvitation(invitation.id)}
+                                  disabled={processingId === invitation.id}
+                                  className="flex-1 py-2 px-3 bg-accent-danger/20 text-accent-danger rounded-lg text-sm font-medium hover:bg-accent-danger/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                  Decline
+                                </button>
+                              </div>
+
+                              {clan && (
+                                <p className="text-xs text-yellow-400 mt-2">
+                                  Leave your current clan to accept
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <Link
+                        to="/invitations"
+                        onClick={() => setNotificationsOpen(false)}
+                        className="block p-3 text-center text-sm text-accent-primary hover:bg-dark-700 transition-colors"
+                      >
+                        View all invitations
+                      </Link>
+                    </div>
+                  )}
+                </div>
 
                 {/* Profile Dropdown */}
                 <div className="hidden md:flex items-center gap-3">
@@ -153,6 +288,21 @@ export function Navbar() {
                   {label}
                 </Link>
               ))}
+
+              {/* Mobile Invitations Link */}
+              {invitations.length > 0 && (
+                <Link
+                  to="/invitations"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-accent-warning hover:bg-dark-700"
+                >
+                  <Bell className="w-5 h-5" />
+                  Invitations
+                  <span className="ml-auto bg-accent-danger px-2 py-0.5 rounded-full text-xs">
+                    {invitations.length}
+                  </span>
+                </Link>
+              )}
 
               <div className="border-t border-dark-600 my-2" />
 

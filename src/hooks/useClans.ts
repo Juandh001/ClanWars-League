@@ -69,7 +69,7 @@ export function useClan(clanId: string | undefined) {
       .from('clan_members')
       .select(`
         *,
-        profile:profiles(*)
+        profile:profiles!clan_members_user_id_fkey(*)
       `)
       .eq('clan_id', clanId)
 
@@ -79,10 +79,13 @@ export function useClan(clanId: string | undefined) {
       return
     }
 
+    // Validate that members have profiles
+    const validMembers = (membersData || []).filter(m => m.profile != null)
+
     const clanWithMembers: ClanWithMembers = {
       ...clanData,
       captain: Array.isArray(clanData.captain) ? clanData.captain[0] : clanData.captain,
-      members: membersData.map(m => ({
+      members: validMembers.map(m => ({
         ...m,
         profile: Array.isArray(m.profile) ? m.profile[0] : m.profile
       })) as (ClanMember & { profile: Profile })[]
@@ -97,6 +100,35 @@ export function useClan(clanId: string | undefined) {
   }, [fetchClan])
 
   return { clan, loading, error, refetch: fetchClan }
+}
+
+// Search users by nickname for inviting
+export function useUserSearch() {
+  const [results, setResults] = useState<Profile[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const searchUsers = async (query: string) => {
+    if (!query || query.length < 2 || !isSupabaseConfigured()) {
+      setResults([])
+      return
+    }
+
+    setLoading(true)
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, nickname, email, is_online, last_seen')
+      .ilike('nickname', `%${query}%`)
+      .limit(10)
+
+    if (!error && data) {
+      setResults(data as Profile[])
+    }
+
+    setLoading(false)
+  }
+
+  return { results, loading, searchUsers, clearResults: () => setResults([]) }
 }
 
 export function useClanActions() {
@@ -141,7 +173,8 @@ export function useClanActions() {
     return { error: null, data: clanData }
   }
 
-  const inviteMember = async (clanId: string, email: string) => {
+  // New: Invite by nickname (searches user and creates invitation)
+  const inviteMemberByNickname = async (clanId: string, nickname: string) => {
     if (!user || !isSupabaseConfigured()) {
       return { error: new Error('Not authenticated') }
     }
@@ -155,6 +188,28 @@ export function useClanActions() {
 
     if (clanData?.captain_id !== user.id) {
       return { error: new Error('Only the captain can invite members') }
+    }
+
+    // Find user by nickname
+    const { data: targetUser, error: userError } = await supabase
+      .from('profiles')
+      .select('id, email, nickname')
+      .ilike('nickname', nickname)
+      .single()
+
+    if (userError || !targetUser) {
+      return { error: new Error(`User "${nickname}" not found`) }
+    }
+
+    // Check if target user is already in a clan
+    const { data: existingMembership } = await supabase
+      .from('clan_members')
+      .select('clan_id')
+      .eq('user_id', targetUser.id)
+      .single()
+
+    if (existingMembership) {
+      return { error: new Error(`${targetUser.nickname} is already in a clan`) }
     }
 
     // Check clan member count
@@ -172,12 +227,12 @@ export function useClanActions() {
       .from('clan_invitations')
       .select('*')
       .eq('clan_id', clanId)
-      .eq('email', email.toLowerCase())
+      .eq('user_id', targetUser.id)
       .eq('status', 'pending')
       .single()
 
     if (existingInvite) {
-      return { error: new Error('An invitation is already pending for this email') }
+      return { error: new Error(`An invitation is already pending for ${targetUser.nickname}`) }
     }
 
     // Create invitation
@@ -188,13 +243,46 @@ export function useClanActions() {
       .from('clan_invitations')
       .insert({
         clan_id: clanId,
-        email: email.toLowerCase(),
+        user_id: targetUser.id,
+        email: targetUser.email,
         invited_by: user.id,
         status: 'pending',
         expires_at: expiresAt.toISOString()
       })
 
-    return { error }
+    return { error, invitedUser: targetUser }
+  }
+
+  // Legacy: Invite by email (kept for compatibility)
+  const inviteMember = async (clanId: string, email: string) => {
+    if (!user || !isSupabaseConfigured()) {
+      return { error: new Error('Not authenticated') }
+    }
+
+    // Check if user is captain
+    const { data: clanData } = await supabase
+      .from('clans')
+      .select('captain_id')
+      .eq('id', clanId)
+      .single()
+
+    if (clanData?.captain_id !== user.id) {
+      return { error: new Error('Only the captain can invite members') }
+    }
+
+    // Find user by email
+    const { data: targetUser } = await supabase
+      .from('profiles')
+      .select('id, email, nickname')
+      .eq('email', email.toLowerCase())
+      .single()
+
+    if (!targetUser) {
+      return { error: new Error('No user found with that email. They must register first.') }
+    }
+
+    // Use the new invite by nickname function
+    return inviteMemberByNickname(clanId, targetUser.nickname)
   }
 
   const acceptInvitation = async (invitationId: string) => {
@@ -213,15 +301,18 @@ export function useClanActions() {
       return { error: new Error('Invitation not found') }
     }
 
-    // Verify email matches
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('email')
-      .eq('id', user.id)
-      .single()
+    // Verify invitation is for this user
+    if (invitation.user_id !== user.id) {
+      // Fallback to email check for old invitations
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('id', user.id)
+        .single()
 
-    if (profile?.email.toLowerCase() !== invitation.email.toLowerCase()) {
-      return { error: new Error('This invitation is not for your email') }
+      if (profile?.email.toLowerCase() !== invitation.email?.toLowerCase()) {
+        return { error: new Error('This invitation is not for you') }
+      }
     }
 
     // Check if user already in a clan
@@ -264,6 +355,44 @@ export function useClanActions() {
 
     await refreshProfile()
     return { error: null }
+  }
+
+  const declineInvitation = async (invitationId: string) => {
+    if (!user || !isSupabaseConfigured()) {
+      return { error: new Error('Not authenticated') }
+    }
+
+    // Get invitation to verify ownership
+    const { data: invitation } = await supabase
+      .from('clan_invitations')
+      .select('user_id, email')
+      .eq('id', invitationId)
+      .single()
+
+    if (!invitation) {
+      return { error: new Error('Invitation not found') }
+    }
+
+    // Verify invitation is for this user
+    if (invitation.user_id !== user.id) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.email.toLowerCase() !== invitation.email?.toLowerCase()) {
+        return { error: new Error('This invitation is not for you') }
+      }
+    }
+
+    // Update invitation status to rejected
+    const { error } = await supabase
+      .from('clan_invitations')
+      .update({ status: 'rejected' })
+      .eq('id', invitationId)
+
+    return { error }
   }
 
   const kickMember = async (clanId: string, memberId: string) => {
@@ -348,50 +477,65 @@ export function useClanActions() {
   return {
     createClan,
     inviteMember,
+    inviteMemberByNickname,
     acceptInvitation,
+    declineInvitation,
     kickMember,
     leaveClan
   }
 }
 
+// Extended invitation type with clan and inviter info
+export interface InvitationWithDetails extends ClanInvitation {
+  clan: Clan
+  inviter: Profile
+}
+
 export function usePendingInvitations() {
   const { user } = useAuth()
-  const [invitations, setInvitations] = useState<(ClanInvitation & { clan: Clan })[]>([])
+  const [invitations, setInvitations] = useState<InvitationWithDetails[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchInvitations = useCallback(async () => {
     if (!user || !isSupabaseConfigured()) {
+      setInvitations([])
       setLoading(false)
       return
     }
 
-    // Get user email
+    // Get user email for fallback
     const { data: profile } = await supabase
       .from('profiles')
       .select('email')
       .eq('id', user.id)
       .single()
 
-    if (!profile) {
-      setLoading(false)
-      return
-    }
-
-    const { data, error } = await supabase
+    // Query invitations by user_id OR email (for backwards compatibility)
+    let query = supabase
       .from('clan_invitations')
       .select(`
         *,
-        clan:clans(*)
+        clan:clans(*),
+        inviter:profiles!clan_invitations_invited_by_fkey(*)
       `)
-      .eq('email', profile.email.toLowerCase())
       .eq('status', 'pending')
       .gt('expires_at', new Date().toISOString())
+
+    // Add user filter
+    if (profile?.email) {
+      query = query.or(`user_id.eq.${user.id},email.eq.${profile.email.toLowerCase()}`)
+    } else {
+      query = query.eq('user_id', user.id)
+    }
+
+    const { data, error } = await query
 
     if (!error && data) {
       setInvitations(data.map(inv => ({
         ...inv,
-        clan: Array.isArray(inv.clan) ? inv.clan[0] : inv.clan
-      })) as (ClanInvitation & { clan: Clan })[])
+        clan: Array.isArray(inv.clan) ? inv.clan[0] : inv.clan,
+        inviter: Array.isArray(inv.inviter) ? inv.inviter[0] : inv.inviter
+      })) as InvitationWithDetails[])
     }
 
     setLoading(false)
@@ -400,6 +544,31 @@ export function usePendingInvitations() {
   useEffect(() => {
     fetchInvitations()
   }, [fetchInvitations])
+
+  // Realtime subscription for new invitations
+  useEffect(() => {
+    if (!user || !isSupabaseConfigured()) return
+
+    const channel = supabase
+      .channel('invitation-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'clan_invitations',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          fetchInvitations()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, fetchInvitations])
 
   return { invitations, loading, refetch: fetchInvitations }
 }
