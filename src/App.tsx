@@ -13,7 +13,6 @@ import { ClansListPage } from './pages/ClansListPage'
 import { PlayerPage } from './pages/PlayerPage'
 import { InvitationsPage } from './pages/InvitationsPage'
 import { AdminPage } from './pages/AdminPage'
-import { WarriorRankingsPage } from './pages/WarriorRankingsPage'
 import { HallOfFamePage } from './pages/HallOfFamePage'
 
 // Protected Route Component
@@ -55,7 +54,6 @@ function AppRoutes() {
         <Route path="/clans" element={<ClansListPage />} />
         <Route path="/clan/:id" element={<ClanPage />} />
         <Route path="/player/:id" element={<PlayerPage />} />
-        <Route path="/warriors" element={<WarriorRankingsPage />} />
         <Route path="/hall-of-fame" element={<HallOfFamePage />} />
 
         {/* Auth Routes */}

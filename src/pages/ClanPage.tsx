@@ -179,13 +179,13 @@ export function ClanPage() {
                 </div>
               )}
 
-              {isMember && !isCaptain && userClan?.id === clan.id && (
+              {isMember && userClan && (
                 <button
                   onClick={() => setShowReportModal(true)}
                   className="btn-secondary flex items-center gap-2"
                 >
                   <Flag className="w-4 h-4" />
-                  Report Loss
+                  Report Match
                 </button>
               )}
             </div>
@@ -541,11 +541,10 @@ export function ClanPage() {
         )}
       </Modal>
 
-      {/* Report Loss Modal */}
+      {/* Report Match Modal */}
       <ReportLossModal
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
-        clanId={clan.id}
         onSuccess={refetch}
       />
 
@@ -568,41 +567,45 @@ export function ClanPage() {
   )
 }
 
-// Report Loss Modal Component
+// Report Loss Modal Component - Only losing clan reports
 function ReportLossModal({
   isOpen,
   onClose,
-  clanId,
   onSuccess
 }: {
   isOpen: boolean
   onClose: () => void
-  clanId: string
   onSuccess: () => void
 }) {
   const { reportLoss, submitting } = useReportMatch()
   const { clans } = useClans()
+  const { clan: userClan } = useAuth()
 
   const [winnerClanId, setWinnerClanId] = useState('')
   const [matchMode, setMatchMode] = useState<MatchMode>('5v5')
-  const [ourScore, setOurScore] = useState('')
-  const [theirScore, setTheirScore] = useState('')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
-  const [isPowerWin, setIsPowerWin] = useState(false)
-  const [powerPointsBonus, setPowerPointsBonus] = useState(0)
+  const [pointsAwarded, setPointsAwarded] = useState(0)
+  const [formatMultiplier, setFormatMultiplier] = useState(1)
 
   // Participant selection
   const [selectedWinnerPlayers, setSelectedWinnerPlayers] = useState<string[]>([])
   const [selectedLoserPlayers, setSelectedLoserPlayers] = useState<string[]>([])
 
-  // Fetch members for both teams when winner is selected
+  // Fetch members for both teams
   const { members: winnerMembers, loading: winnerLoading } = useClanMembers(winnerClanId || null)
-  const { members: loserMembers, loading: loserLoading } = useClanMembers(clanId)
+  const { members: loserMembers, loading: loserLoading } = useClanMembers(userClan?.id || null)
 
-  const availableClans = clans.filter((c: any) => c.id !== clanId)
+  // Get all clans and filter for opponent selection
+  const userClanId = userClan?.id
+  const opponentClans = clans.filter((c: any) => c.id !== userClanId)
   const playersRequired = getPlayersPerTeam(matchMode)
+
+  // Format multipliers for display
+  const FORMAT_MULTIPLIERS: Record<MatchMode, number> = {
+    '1v1': 1.0, '2v2': 1.2, '3v3': 1.5, '4v4': 1.8, '5v5': 2.2, '6v6': 2.5
+  }
 
   // Reset participant selection when winner clan or mode changes
   const handleWinnerChange = (newWinnerId: string) => {
@@ -644,11 +647,8 @@ function ReportLossModal({
     e.preventDefault()
     setError('')
 
-    const loserScore = parseInt(ourScore)
-    const winnerScore = parseInt(theirScore)
-
-    if (loserScore >= winnerScore) {
-      setError('Winner score must be higher than loser score when reporting a loss')
+    if (!winnerClanId) {
+      setError('Please select the winning clan')
       return
     }
 
@@ -664,8 +664,6 @@ function ReportLossModal({
 
     const result = await reportLoss(
       winnerClanId,
-      loserScore,
-      winnerScore,
       matchMode,
       selectedWinnerPlayers,
       selectedLoserPlayers,
@@ -676,16 +674,14 @@ function ReportLossModal({
       setError(result.error.message)
     } else {
       setSuccess(true)
-      setIsPowerWin(result.isPowerWin || false)
-      setPowerPointsBonus(result.powerPointsBonus || 0)
+      setPointsAwarded(result.pointsAwarded || 0)
+      setFormatMultiplier(result.formatMultiplier || 1)
       setTimeout(() => {
         onClose()
         onSuccess()
         setSuccess(false)
         setWinnerClanId('')
         setMatchMode('5v5')
-        setOurScore('')
-        setTheirScore('')
         setNotes('')
         setSelectedWinnerPlayers([])
         setSelectedLoserPlayers([])
@@ -694,7 +690,7 @@ function ReportLossModal({
   }
 
   const selectedWinnerClan = clans.find((c: any) => c.id === winnerClanId)
-  const loserClan = clans.find((c: any) => c.id === clanId)
+  const calculatedPoints = Math.round(100 * FORMAT_MULTIPLIERS[matchMode])
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Report Match Loss" size="xl">
@@ -706,22 +702,17 @@ function ReportLossModal({
           <h3 className="text-xl font-bold mb-2">Match Reported!</h3>
           <p className="text-gray-400">
             Rankings and warrior stats have been updated.
-            {(isPowerWin || powerPointsBonus > 0) && (
-              <span className="block mt-2 text-accent-warning flex items-center justify-center gap-2">
-                <Zap className="w-4 h-4" />
-                {powerPointsBonus > 0
-                  ? `Power Points Bonus: +${powerPointsBonus} (Total: +${3 + powerPointsBonus} points)`
-                  : 'Power Win awarded to opponent (+4 points)'
-                }
-              </span>
-            )}
+            <span className="block mt-2 text-accent-primary flex items-center justify-center gap-2">
+              <Zap className="w-4 h-4" />
+              Winner awarded +{pointsAwarded} PP ({formatMultiplier}x multiplier)
+            </span>
           </p>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
           <Alert
             type="info"
-            message="Only the losing clan reports the match. Select the match mode, participating players, and scores."
+            message="Only the losing clan reports the match. Select the winning clan and participating players."
           />
 
           {error && <Alert type="error" message={error} />}
@@ -747,12 +738,15 @@ function ReportLossModal({
                 </button>
               ))}
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Multiplier: {FORMAT_MULTIPLIERS[matchMode]}x = <span className="text-accent-primary font-semibold">{calculatedPoints} PP</span> for winner
+            </p>
           </div>
 
           {/* Winner Clan Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Winner Clan *
+              Winning Clan (Opponent) *
             </label>
             <select
               value={winnerClanId}
@@ -761,7 +755,7 @@ function ReportLossModal({
               required
             >
               <option value="">Select the winning clan...</option>
-              {availableClans.map((c: any) => (
+              {opponentClans.map((c: any) => (
                 <option key={c.id} value={c.id}>
                   [{c.tag}] {c.name} ({c.points} pts)
                 </option>
@@ -777,7 +771,7 @@ function ReportLossModal({
                 <h4 className="font-semibold text-accent-success mb-3 flex items-center justify-between">
                   <span className="flex items-center gap-2">
                     <Trophy className="w-4 h-4" />
-                    Winner Team [{selectedWinnerClan?.tag}]
+                    Winner [{selectedWinnerClan?.tag}]
                   </span>
                   <span className="text-xs bg-dark-600 px-2 py-1 rounded">
                     {selectedWinnerPlayers.length}/{playersRequired}
@@ -816,7 +810,7 @@ function ReportLossModal({
                           )}
                         </div>
                         <span className="text-sm">{member.nickname}</span>
-                        {member.role === 'captain' && (
+                        {member.clanRole === 'captain' && (
                           <Crown className="w-3 h-3 text-yellow-400" />
                         )}
                       </label>
@@ -830,7 +824,7 @@ function ReportLossModal({
                 <h4 className="font-semibold text-accent-danger mb-3 flex items-center justify-between">
                   <span className="flex items-center gap-2">
                     <Users className="w-4 h-4" />
-                    Our Team [{loserClan?.tag}]
+                    Our Team [{userClan?.tag}]
                   </span>
                   <span className="text-xs bg-dark-600 px-2 py-1 rounded">
                     {selectedLoserPlayers.length}/{playersRequired}
@@ -869,7 +863,7 @@ function ReportLossModal({
                           )}
                         </div>
                         <span className="text-sm">{member.nickname}</span>
-                        {member.role === 'captain' && (
+                        {member.clanRole === 'captain' && (
                           <Crown className="w-3 h-3 text-yellow-400" />
                         )}
                       </label>
@@ -879,38 +873,6 @@ function ReportLossModal({
               </div>
             </div>
           )}
-
-          {/* Scores */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Our Score (Loser) *
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={ourScore}
-                onChange={(e) => setOurScore(e.target.value)}
-                className="input-field"
-                placeholder="0"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Their Score (Winner) *
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={theirScore}
-                onChange={(e) => setTheirScore(e.target.value)}
-                className="input-field"
-                placeholder="0"
-                required
-              />
-            </div>
-          </div>
 
           {/* Notes */}
           <div>
@@ -929,15 +891,12 @@ function ReportLossModal({
           {/* Points Info */}
           <div className="bg-dark-700/50 rounded-lg p-4">
             <p className="text-sm text-gray-400">
-              <strong className="text-white">Points Distribution:</strong>
+              <strong className="text-white">Power Points (PP) System:</strong>
               <br />
-              Winner: +3 base points + Power Points bonus
+              Base: 100 PP × Format Multiplier
               <br />
-              <span className="text-accent-warning flex items-center gap-1 mt-2">
-                <Zap className="w-4 h-4" />
-                <span>
-                  <strong>Power Points:</strong> Bonus for beating higher-ranked clans + score diff of 5+
-                </span>
+              <span className="text-accent-primary mt-2 block">
+                <strong>{matchMode}:</strong> 100 × {FORMAT_MULTIPLIERS[matchMode]} = <span className="font-bold">{calculatedPoints} PP</span>
               </span>
             </p>
           </div>

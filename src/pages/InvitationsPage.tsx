@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Mail, Check, X, Users, Clock, AlertCircle, UserPlus, XCircle } from 'lucide-react'
 import { usePendingInvitations, useClanActions } from '../hooks/useClans'
 import { useAuth } from '../contexts/AuthContext'
@@ -10,7 +10,8 @@ import { format } from 'date-fns'
 export function InvitationsPage() {
   const { invitations, loading, refetch } = usePendingInvitations()
   const { acceptInvitation, declineInvitation } = useClanActions()
-  const { clan } = useAuth()
+  const { clan, refreshProfile } = useAuth()
+  const navigate = useNavigate()
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -21,17 +22,19 @@ export function InvitationsPage() {
     setSuccess('')
 
     const { error } = await acceptInvitation(invitationId)
+    setProcessingId(null)
 
     if (error) {
       setError(error.message)
     } else {
       setSuccess(`You have joined ${clanName}!`)
-      refetch()
-      // Reload to update clan info
-      setTimeout(() => window.location.reload(), 1500)
+      // Refresh profile to update clan data
+      await refreshProfile()
+      // Navigate to home after a brief delay to show success message
+      setTimeout(() => {
+        navigate('/')
+      }, 1500)
     }
-
-    setProcessingId(null)
   }
 
   const handleDecline = async (invitationId: string, clanName: string) => {

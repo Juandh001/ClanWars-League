@@ -51,13 +51,17 @@ export function Navbar() {
   const handleAcceptInvitation = async (invitationId: string) => {
     setProcessingId(invitationId)
     const { error } = await acceptInvitation(invitationId)
-    if (!error) {
-      refetchInvitations()
-      setNotificationsOpen(false)
-      // Reload to update clan info
-      window.location.reload()
-    }
     setProcessingId(null)
+
+    if (!error) {
+      setNotificationsOpen(false)
+      // Navigate to home and let the AuthContext refresh
+      navigate('/')
+      // Small delay to ensure navigation completes, then refetch
+      setTimeout(() => {
+        refetchInvitations()
+      }, 100)
+    }
   }
 
   const handleDeclineInvitation = async (invitationId: string) => {
@@ -70,8 +74,7 @@ export function Navbar() {
   }
 
   const navLinks = [
-    { to: '/', label: 'Clans', icon: Trophy },
-    { to: '/warriors', label: 'Warriors', icon: Swords },
+    { to: '/', label: 'Rankings', icon: Trophy },
     { to: '/clans', label: 'Browse', icon: Users },
     { to: '/hall-of-fame', label: 'Hall of Fame', icon: Star },
     ...(clan ? [{ to: `/clan/${clan.id}`, label: 'My Clan', icon: Shield }] : []),
