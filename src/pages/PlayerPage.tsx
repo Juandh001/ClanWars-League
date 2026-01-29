@@ -48,8 +48,10 @@ export function PlayerPage() {
     )
   }
 
-  const winRate = stats && stats.totalMatches > 0
-    ? ((stats.wins / stats.totalMatches) * 100).toFixed(1)
+  // Use profile stats for consistency (updated by database triggers)
+  const totalMatches = (profile.warrior_wins || 0) + (profile.warrior_losses || 0)
+  const winRate = totalMatches > 0
+    ? (((profile.warrior_wins || 0) / totalMatches) * 100).toFixed(1)
     : '0.0'
 
   return (
@@ -209,7 +211,7 @@ export function PlayerPage() {
             </div>
             <span className="text-gray-400 text-sm">Matches</span>
           </div>
-          <p className="text-3xl font-bold">{stats?.totalMatches || 0}</p>
+          <p className="text-3xl font-bold">{totalMatches}</p>
         </div>
       </div>
 

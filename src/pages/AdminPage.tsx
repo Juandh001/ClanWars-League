@@ -201,8 +201,14 @@ export function AdminPage() {
       return
     }
 
+    // Calculate the next season number
+    const maxSeasonNumber = seasons.length > 0
+      ? Math.max(...seasons.map(s => s.number))
+      : 0
+    const nextSeasonNumber = maxSeasonNumber + 1
+
     setError('')
-    const { error } = await startNewSeason(newSeasonName.trim())
+    const { error } = await startNewSeason(newSeasonName.trim(), nextSeasonNumber, 30)
 
     if (error) {
       setError(error.message)

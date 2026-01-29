@@ -52,29 +52,40 @@ export function useWarriorRankings(seasonId?: string | null) {
 
       setWarriors(rankings)
     } else {
-      // Fetch current season warriors from profiles
+      // Fetch all players who have a clan (regardless of matches played)
+      const { data: membersData, error: membersError } = await supabase
+        .from('clan_members')
+        .select(`
+          user_id,
+          clan:clans(id, name, tag, logo_url)
+        `)
+
+      if (membersError) {
+        setError(membersError.message)
+        setLoading(false)
+        return
+      }
+
+      // Get unique user IDs from clan members
+      const warriorIds = (membersData || []).map((m: any) => m.user_id)
+
+      if (warriorIds.length === 0) {
+        setWarriors([])
+        setLoading(false)
+        return
+      }
+
+      // Fetch profiles for all clan members
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
-        .or('warrior_wins.gt.0,warrior_losses.gt.0')
-        .order('warrior_points', { ascending: false })
+        .in('id', warriorIds)
 
       if (profilesError) {
         setError(profilesError.message)
         setLoading(false)
         return
       }
-
-      // Fetch clan memberships for these warriors
-      const warriorIds = (profilesData || []).map(p => p.id)
-
-      const { data: membersData } = await supabase
-        .from('clan_members')
-        .select(`
-          user_id,
-          clan:clans(id, name, tag, logo_url)
-        `)
-        .in('user_id', warriorIds)
 
       // Create a map of user_id to clan
       const clanMap = new Map<string, any>()
@@ -92,6 +103,14 @@ export function useWarriorRankings(seasonId?: string | null) {
           days_inactive: calculateDaysInactive(profile.last_seen),
           total_games: (profile.warrior_wins || 0) + (profile.warrior_losses || 0)
         }
+      })
+
+      // Sort by warrior_points descending, then by nickname for ties
+      rankings.sort((a, b) => {
+        if (b.warrior_points !== a.warrior_points) {
+          return (b.warrior_points || 0) - (a.warrior_points || 0)
+        }
+        return a.nickname.localeCompare(b.nickname)
       })
 
       setWarriors(rankings)

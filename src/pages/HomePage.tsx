@@ -14,11 +14,9 @@ import {
 import { useRankings } from '../hooks/useMatches'
 import { useWarriorRankings } from '../hooks/useWarriorRankings'
 import { useSeasons, useCurrentSeason } from '../hooks/useSeasons'
-import { useBadges } from '../hooks/useBadges'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
 import { SeasonSelector, SeasonInfo } from '../components/ui/SeasonSelector'
 import { StreakBadge } from '../components/ui/StreakIndicator'
-import { BadgeDisplay } from '../components/ui/BadgeDisplay'
 import { StatusIndicator } from '../components/ui/StatusIndicator'
 
 export function HomePage() {
@@ -272,8 +270,6 @@ function ClanRankRow({
   getRankBadge: (rank: number) => React.ReactNode
   getRankRowClass: (rank: number) => string
 }) {
-  const { badges } = useBadges(clan.id, 'clan')
-
   return (
     <tr className={`transition-colors ${getRankRowClass(rank)}`}>
       <td className="table-cell">
@@ -294,14 +290,9 @@ function ClanRankRow({
             )}
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-1">
-              <p className="font-semibold text-white group-hover:text-accent-primary transition-colors text-sm truncate">
-                {clan.name}
-              </p>
-              {badges.length > 0 && (
-                <BadgeDisplay badges={badges} size="sm" maxDisplay={2} />
-              )}
-            </div>
+            <p className="font-semibold text-white group-hover:text-accent-primary transition-colors text-sm truncate">
+              {clan.name}
+            </p>
             <p className="text-xs text-gray-500">[{clan.tag}]</p>
           </div>
         </Link>
@@ -338,8 +329,6 @@ function WarriorRankRow({
   getRankBadge: (rank: number) => React.ReactNode
   getRankRowClass: (rank: number) => string
 }) {
-  const { badges } = useBadges(warrior.id, 'warrior')
-
   return (
     <tr className={`transition-colors ${getRankRowClass(rank)}`}>
       <td className="table-cell">
@@ -364,12 +353,9 @@ function WarriorRankRow({
           <div className="min-w-0">
             <Link
               to={`/player/${warrior.id}`}
-              className="font-semibold hover:text-accent-primary transition-colors flex items-center gap-1 text-sm"
+              className="font-semibold hover:text-accent-primary transition-colors text-sm truncate"
             >
-              <span className="truncate">{warrior.nickname}</span>
-              {badges.length > 0 && (
-                <BadgeDisplay badges={badges} size="sm" maxDisplay={2} />
-              )}
+              {warrior.nickname}
             </Link>
           </div>
         </div>

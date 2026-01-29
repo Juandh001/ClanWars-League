@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import type { Profile, ProfileWithClan, Match, MatchWithClans } from '../types/database'
+import type { Profile, ProfileWithClan, MatchWithClans, Clan, ClanMember } from '../types/database'
 
 export function useProfile(userId: string | undefined) {
   const [profile, setProfile] = useState<ProfileWithClan | null>(null)
@@ -38,11 +38,14 @@ export function useProfile(userId: string | undefined) {
       .eq('user_id', userId)
       .single()
 
+    const typedMemberData = memberData as (ClanMember & { clan: Clan | Clan[] }) | null
+    const typedProfileData = profileData as Profile
+
     const profileWithClan: ProfileWithClan = {
-      ...profileData,
-      clan_member: memberData ? {
-        ...memberData,
-        clan: Array.isArray(memberData.clan) ? memberData.clan[0] : memberData.clan
+      ...typedProfileData,
+      clan_member: typedMemberData ? {
+        ...typedMemberData,
+        clan: Array.isArray(typedMemberData.clan) ? typedMemberData.clan[0] : typedMemberData.clan
       } : undefined
     }
 
@@ -75,14 +78,15 @@ export function usePlayerStats(userId: string | undefined) {
 
     setLoading(true)
 
-    // Get user's current clan
-    const { data: memberData } = await supabase
-      .from('clan_members')
-      .select('clan_id')
+    // Get matches where this specific player participated (not all clan matches)
+    const { data: participationsData } = await supabase
+      .from('match_participants')
+      .select('match_id, team')
       .eq('user_id', userId)
-      .single()
 
-    if (!memberData) {
+    const typedParticipations = participationsData as { match_id: string; team: 'winner' | 'loser' }[] | null
+
+    if (!typedParticipations || typedParticipations.length === 0) {
       setStats({
         totalMatches: 0,
         wins: 0,
@@ -94,7 +98,10 @@ export function usePlayerStats(userId: string | undefined) {
       return
     }
 
-    // Get matches for user's clan
+    // Get the match IDs where the player participated
+    const matchIds = typedParticipations.map(p => p.match_id)
+
+    // Get full match details for those matches
     const { data: matchesData } = await supabase
       .from('matches')
       .select(`
@@ -103,11 +110,30 @@ export function usePlayerStats(userId: string | undefined) {
         loser_clan:clans!matches_loser_clan_id_fkey(*),
         reporter:profiles!matches_reported_by_fkey(*)
       `)
-      .or(`winner_clan_id.eq.${memberData.clan_id},loser_clan_id.eq.${memberData.clan_id}`)
+      .in('id', matchIds)
       .order('created_at', { ascending: false })
 
     if (matchesData) {
-      const formattedMatches = matchesData.map(match => ({
+      const typedMatchesData = matchesData as Array<{
+        id: string
+        winner_clan_id: string
+        loser_clan_id: string
+        reported_by: string
+        winner_score: number
+        loser_score: number
+        points_awarded: number
+        power_win: boolean
+        power_points_bonus: number
+        match_mode: string
+        notes: string | null
+        created_at: string
+        season_id: string | null
+        winner_clan: Clan | Clan[]
+        loser_clan: Clan | Clan[]
+        reporter: Profile | Profile[]
+      }>
+
+      const formattedMatches = typedMatchesData.map(match => ({
         ...match,
         winner_clan: Array.isArray(match.winner_clan) ? match.winner_clan[0] : match.winner_clan,
         loser_clan: Array.isArray(match.loser_clan) ? match.loser_clan[0] : match.loser_clan,
@@ -116,8 +142,10 @@ export function usePlayerStats(userId: string | undefined) {
 
       setMatches(formattedMatches)
 
-      const wins = formattedMatches.filter(m => m.winner_clan_id === memberData.clan_id).length
-      const losses = formattedMatches.filter(m => m.loser_clan_id === memberData.clan_id).length
+      // Calculate wins/losses based on the player's team in each match
+      const participationMap = new Map(typedParticipations.map(p => [p.match_id, p.team]))
+      const wins = formattedMatches.filter(m => participationMap.get(m.id) === 'winner').length
+      const losses = formattedMatches.filter(m => participationMap.get(m.id) === 'loser').length
 
       setStats({
         totalMatches: wins + losses,

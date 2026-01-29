@@ -231,11 +231,10 @@ DECLARE
     warrior_record RECORD;
     rank_counter INTEGER := 1;
 BEGIN
-    -- Save final clan stats ordered by points
+    -- Save final clan stats ordered by points (ALL clans, not just those with matches)
     FOR clan_record IN
         SELECT * FROM clans
-        WHERE matches_played > 0
-        ORDER BY points DESC, power_wins DESC, matches_won DESC
+        ORDER BY points DESC, power_wins DESC, matches_won DESC, name ASC
     LOOP
         INSERT INTO season_clan_stats (
             season_id, clan_id, final_rank, points, power_wins,
@@ -267,14 +266,13 @@ BEGIN
         rank_counter := rank_counter + 1;
     END LOOP;
 
-    -- Save final warrior stats
+    -- Save final warrior stats (ALL warriors who have a clan)
     rank_counter := 1;
     FOR warrior_record IN
         SELECT p.*, cm.clan_id
         FROM profiles p
-        LEFT JOIN clan_members cm ON cm.user_id = p.id
-        WHERE p.warrior_wins > 0 OR p.warrior_losses > 0
-        ORDER BY p.warrior_points DESC, p.warrior_power_wins DESC, p.warrior_wins DESC
+        INNER JOIN clan_members cm ON cm.user_id = p.id
+        ORDER BY p.warrior_points DESC, p.warrior_power_wins DESC, p.warrior_wins DESC, p.nickname ASC
     LOOP
         INSERT INTO season_warrior_stats (
             season_id, user_id, clan_id, final_rank, points, power_wins,
@@ -310,7 +308,7 @@ BEGIN
     -- Mark season as inactive
     UPDATE seasons SET is_active = false WHERE id = season_id_param;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function: Start a new season
 CREATE OR REPLACE FUNCTION start_new_season(
@@ -341,6 +339,7 @@ BEGIN
     RETURNING id INTO new_season_id;
 
     -- Reset clan stats (preserves historical data in season_clan_stats)
+    -- WHERE true is required by Supabase to allow mass updates
     UPDATE clans SET
         points = 0,
         power_wins = 0,
@@ -348,20 +347,23 @@ BEGIN
         matches_won = 0,
         matches_lost = 0,
         current_win_streak = 0,
-        current_loss_streak = 0;
+        current_loss_streak = 0
+    WHERE true;
 
     -- Reset warrior stats (preserves historical data in season_warrior_stats)
+    -- WHERE true is required by Supabase to allow mass updates
     UPDATE profiles SET
         warrior_points = 0,
         warrior_power_wins = 0,
         warrior_wins = 0,
         warrior_losses = 0,
         current_win_streak = 0,
-        current_loss_streak = 0;
+        current_loss_streak = 0
+    WHERE true;
 
     RETURN new_season_id;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================
 -- PART 6: REALTIME SUBSCRIPTIONS
