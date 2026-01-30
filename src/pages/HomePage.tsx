@@ -9,23 +9,37 @@ import {
   Users,
   Flame,
   Swords,
-  Search
+  Search,
+  History,
+  CheckCircle,
+  XCircle
 } from 'lucide-react'
-import { useRankings } from '../hooks/useMatches'
+import { useRankings, useMatches } from '../hooks/useMatches'
 import { useWarriorRankings } from '../hooks/useWarriorRankings'
 import { useSeasons, useCurrentSeason } from '../hooks/useSeasons'
 import { LoadingSpinner } from '../components/ui/LoadingSpinner'
 import { SeasonSelector, SeasonInfo } from '../components/ui/SeasonSelector'
 import { StreakBadge } from '../components/ui/StreakIndicator'
 import { StatusIndicator } from '../components/ui/StatusIndicator'
+import { format } from 'date-fns'
 
 export function HomePage() {
   const { rankings, loading: clansLoading } = useRankings()
   const { warriors, loading: warriorsLoading } = useWarriorRankings()
+  const { matches, loading: matchesLoading } = useMatches()
   const { seasons } = useSeasons()
   const { season: currentSeason } = useCurrentSeason()
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Create a map of clan ID to rank position
+  const clanRankMap = useMemo(() => {
+    const map = new Map<string, number>()
+    rankings.forEach((clan, index) => {
+      map.set(clan.id, index + 1)
+    })
+    return map
+  }, [rankings])
 
   // Filter warriors by search term
   const filteredWarriors = useMemo(() => {
@@ -240,6 +254,55 @@ export function HomePage() {
         </div>
       </div>
 
+      {/* Match History Table */}
+      <div className="card overflow-hidden">
+        <div className="p-4 md:p-6 border-b border-dark-600">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg md:text-xl font-display font-bold flex items-center gap-2">
+              <History className="w-5 h-5 text-accent-success" />
+              Match History
+            </h2>
+            <div className="flex items-center gap-2 text-xs md:text-sm text-gray-400">
+              <TrendingUp className="w-4 h-4" />
+              Recent
+            </div>
+          </div>
+        </div>
+
+        {matchesLoading ? (
+          <div className="p-12">
+            <LoadingSpinner size="lg" />
+          </div>
+        ) : matches.length === 0 ? (
+          <div className="p-12 text-center text-gray-400">
+            <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>No matches played yet.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-dark-700/50">
+                <tr>
+                  <th className="table-header text-center">Winner</th>
+                  <th className="table-header text-center">Loser</th>
+                  <th className="table-header text-center">Mode</th>
+                  <th className="table-header text-center hidden md:table-cell">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-dark-700">
+                {matches.slice(0, 20).map((match) => (
+                  <MatchHistoryRow
+                    key={match.id}
+                    match={match}
+                    clanRankMap={clanRankMap}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Legend */}
       <div className="flex flex-wrap items-center justify-center gap-4 md:gap-6 text-xs md:text-sm text-gray-400">
         <div className="flex items-center gap-2">
@@ -385,6 +448,85 @@ function WarriorRankRow({
       </td>
       <td className="table-cell text-center">
         <span className="font-bold text-accent-primary text-sm">{warrior.warrior_points || 0}</span>
+      </td>
+    </tr>
+  )
+}
+
+// Match History Row Component
+function MatchHistoryRow({
+  match,
+  clanRankMap
+}: {
+  match: any
+  clanRankMap: Map<string, number>
+}) {
+  const winnerRank = clanRankMap.get(match.winner_clan?.id) || '-'
+  const loserRank = clanRankMap.get(match.loser_clan?.id) || '-'
+
+  return (
+    <tr className="hover:bg-dark-700/50 transition-colors">
+      {/* Winner */}
+      <td className="table-cell">
+        <div className="flex items-center justify-center gap-2">
+          <CheckCircle className="w-4 h-4 text-accent-success flex-shrink-0" />
+          <Link
+            to={`/clan/${match.winner_clan?.id}`}
+            className="flex items-center gap-2 group"
+          >
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-success/30 to-accent-success/10 flex items-center justify-center shadow-lg overflow-hidden flex-shrink-0 border border-accent-success/30">
+              {match.winner_clan?.logo_url ? (
+                <img src={match.winner_clan.logo_url} alt={match.winner_clan.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs font-bold text-accent-success">{match.winner_clan?.tag}</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-white group-hover:text-accent-success transition-colors text-sm truncate">
+                {match.winner_clan?.name}
+              </p>
+              <p className="text-xs text-gray-500">
+                [{match.winner_clan?.tag}] <span className="text-accent-primary">#{winnerRank}</span>
+              </p>
+            </div>
+          </Link>
+        </div>
+      </td>
+      {/* Loser */}
+      <td className="table-cell">
+        <div className="flex items-center justify-center gap-2">
+          <XCircle className="w-4 h-4 text-accent-danger flex-shrink-0" />
+          <Link
+            to={`/clan/${match.loser_clan?.id}`}
+            className="flex items-center gap-2 group"
+          >
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-danger/30 to-accent-danger/10 flex items-center justify-center shadow-lg overflow-hidden flex-shrink-0 border border-accent-danger/30">
+              {match.loser_clan?.logo_url ? (
+                <img src={match.loser_clan.logo_url} alt={match.loser_clan.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs font-bold text-accent-danger">{match.loser_clan?.tag}</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-white group-hover:text-accent-danger transition-colors text-sm truncate">
+                {match.loser_clan?.name}
+              </p>
+              <p className="text-xs text-gray-500">
+                [{match.loser_clan?.tag}] <span className="text-accent-primary">#{loserRank}</span>
+              </p>
+            </div>
+          </Link>
+        </div>
+      </td>
+      {/* Mode */}
+      <td className="table-cell text-center">
+        <span className="px-2 py-1 bg-accent-secondary/20 text-accent-secondary font-bold rounded-full text-xs">
+          {match.match_mode || '5v5'}
+        </span>
+      </td>
+      {/* Date */}
+      <td className="table-cell text-center text-gray-400 text-xs hidden md:table-cell">
+        {format(new Date(match.created_at), 'MMM d, HH:mm')}
       </td>
     </tr>
   )

@@ -64,6 +64,7 @@ export function AdminPage() {
   // Season edit modal states
   const [showEditSeasonModal, setShowEditSeasonModal] = useState(false)
   const [editingSeason, setEditingSeason] = useState<any>(null)
+  const [editSeasonName, setEditSeasonName] = useState('')
   const [editSeasonStartDate, setEditSeasonStartDate] = useState('')
   const [editSeasonEndDate, setEditSeasonEndDate] = useState('')
 
@@ -247,6 +248,7 @@ export function AdminPage() {
 
   const openEditSeasonModal = (season: any) => {
     setEditingSeason(season)
+    setEditSeasonName(season.name)
     // Format dates for datetime-local input (YYYY-MM-DDTHH:mm)
     setEditSeasonStartDate(new Date(season.start_date).toISOString().slice(0, 16))
     setEditSeasonEndDate(new Date(season.end_date).toISOString().slice(0, 16))
@@ -256,8 +258,14 @@ export function AdminPage() {
   const handleUpdateSeason = async () => {
     if (!editingSeason) return
 
+    if (!editSeasonName.trim()) {
+      setError('Please enter a season name')
+      return
+    }
+
     setError('')
     const { error } = await updateSeason(editingSeason.id, {
+      name: editSeasonName.trim(),
       start_date: new Date(editSeasonStartDate).toISOString(),
       end_date: new Date(editSeasonEndDate).toISOString()
     })
@@ -265,9 +273,10 @@ export function AdminPage() {
     if (error) {
       setError(error.message)
     } else {
-      setSuccess(`Season "${editingSeason.name}" has been updated!`)
+      setSuccess(`Season "${editSeasonName}" has been updated!`)
       setShowEditSeasonModal(false)
       setEditingSeason(null)
+      setEditSeasonName('')
       refetchSeasons()
       setTimeout(() => setSuccess(''), 3000)
     }
@@ -612,7 +621,7 @@ export function AdminPage() {
                                 onClick={() => openEditSeasonModal(season)}
                                 disabled={seasonActionLoading}
                                 className="p-2 text-accent-primary hover:bg-accent-primary/20 rounded-lg transition-colors"
-                                title="Edit Season Dates"
+                                title="Edit Season"
                               >
                                 <Edit3 className="w-4 h-4" />
                               </button>
@@ -911,14 +920,29 @@ export function AdminPage() {
         onClose={() => {
           setShowEditSeasonModal(false)
           setEditingSeason(null)
+          setEditSeasonName('')
           setEditSeasonStartDate('')
           setEditSeasonEndDate('')
           setError('')
         }}
-        title={`Edit Season - ${editingSeason?.name || ''}`}
+        title={`Edit Season #${editingSeason?.number || ''}`}
       >
         <div className="space-y-4">
           {error && <Alert type="error" message={error} />}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Season Name *
+            </label>
+            <input
+              type="text"
+              value={editSeasonName}
+              onChange={(e) => setEditSeasonName(e.target.value)}
+              className="input-field"
+              placeholder="e.g., Season 1 - January 2025"
+              required
+            />
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -953,7 +977,7 @@ export function AdminPage() {
             </button>
             <button
               onClick={handleUpdateSeason}
-              disabled={!editSeasonStartDate || !editSeasonEndDate || seasonActionLoading}
+              disabled={!editSeasonName.trim() || !editSeasonStartDate || !editSeasonEndDate || seasonActionLoading}
               className="btn-primary"
             >
               {seasonActionLoading ? 'Saving...' : 'Save Changes'}
