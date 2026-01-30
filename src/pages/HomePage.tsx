@@ -94,12 +94,11 @@ export function HomePage() {
   }
 
   // Calculate global stats
-  // Note: Each match involves 2 clans, so we divide total matches_played by 2
   const stats = useMemo(() => ({
     totalClans: rankings.length,
     totalWarriors: warriors.length,
-    totalMatches: Math.floor(rankings.reduce((acc, c) => acc + c.matches_played, 0) / 2)
-  }), [rankings, warriors])
+    totalMatches: matches.length
+  }), [rankings, warriors, matches])
 
   return (
     <div className="space-y-8">
