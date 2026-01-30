@@ -25,7 +25,7 @@ import { format } from 'date-fns'
 
 export function HomePage() {
   const { seasons } = useSeasons()
-  const { season: currentSeason } = useCurrentSeason()
+  const { season: currentSeason, loading: currentSeasonLoading } = useCurrentSeason()
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -53,11 +53,15 @@ export function HomePage() {
     return selectedSeasonId
   }, [selectedSeasonId, selectedSeason])
 
+  // Don't fetch data until season is initialized
+  const shouldLoadData = selectedSeasonId !== null
+
   // Pass historicalSeasonId to filter clan/warrior rankings by season
-  const { rankings, loading: clansLoading } = useRankings(historicalSeasonId)
-  const { warriors, loading: warriorsLoading } = useWarriorRankings(historicalSeasonId)
+  // Only call hooks when we have a selected season to avoid loading unfiltered data
+  const { rankings, loading: clansLoading } = useRankings(shouldLoadData ? historicalSeasonId : 'SKIP')
+  const { warriors, loading: warriorsLoading } = useWarriorRankings(shouldLoadData ? historicalSeasonId : 'SKIP')
   // For matches, filter by seasonId
-  const { matches, loading: matchesLoading } = useMatches(undefined, selectedSeasonId)
+  const { matches, loading: matchesLoading } = useMatches(undefined, shouldLoadData ? selectedSeasonId : 'SKIP')
 
   // Create a map of clan ID to rank position
   const clanRankMap = useMemo(() => {
@@ -79,6 +83,13 @@ export function HomePage() {
     )
   }, [warriors, searchTerm])
 
+  // Calculate global stats
+  const stats = useMemo(() => ({
+    totalClans: rankings.length,
+    totalWarriors: warriors.length,
+    totalMatches: matches.length
+  }), [rankings, warriors, matches])
+
   const getRankBadge = (rank: number) => {
     if (rank === 1) return <Crown className="w-5 h-5 text-yellow-400" />
     if (rank === 2) return <Medal className="w-5 h-5 text-gray-300" />
@@ -93,12 +104,14 @@ export function HomePage() {
     return 'hover:bg-dark-700/50'
   }
 
-  // Calculate global stats
-  const stats = useMemo(() => ({
-    totalClans: rankings.length,
-    totalWarriors: warriors.length,
-    totalMatches: matches.length
-  }), [rankings, warriors, matches])
+  // Show loading while initializing
+  if (!shouldLoadData) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">

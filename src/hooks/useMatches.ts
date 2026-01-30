@@ -249,6 +249,12 @@ export function useMatches(clanId?: string, seasonId?: string | null) {
   const [error, setError] = useState<string | null>(null)
 
   const fetchMatches = useCallback(async () => {
+    // Skip fetching if seasonId is 'SKIP'
+    if (seasonId === 'SKIP') {
+      setLoading(false)
+      return
+    }
+
     if (!isSupabaseConfigured()) {
       setLoading(false)
       return
@@ -448,11 +454,17 @@ export function useReportMatch() {
     }
 
     // Update winner clan stats
-    const { data: currentWinner } = await supabase
+    const { data: currentWinner, error: winnerFetchError } = await supabase
       .from('clans')
       .select('points, matches_played, matches_won, current_win_streak, current_loss_streak, max_win_streak')
       .eq('id', winnerClanId)
       .single()
+
+    if (winnerFetchError) {
+      console.error('Error fetching winner clan:', winnerFetchError)
+      setSubmitting(false)
+      return { error: winnerFetchError }
+    }
 
     if (currentWinner) {
       const winner = currentWinner as any
@@ -465,15 +477,31 @@ export function useReportMatch() {
         current_loss_streak: 0,
         max_win_streak: Math.max(winner.max_win_streak || 0, newWinStreak)
       }
-      await (supabase.from('clans') as any).update(winnerUpdate).eq('id', winnerClanId)
+
+      const { error: winnerUpdateError } = await (supabase
+        .from('clans') as any)
+        .update(winnerUpdate)
+        .eq('id', winnerClanId)
+
+      if (winnerUpdateError) {
+        console.error('Error updating winner clan:', winnerUpdateError)
+        setSubmitting(false)
+        return { error: winnerUpdateError }
+      }
     }
 
     // Update loser clan stats (with penalty)
-    const { data: currentLoser } = await supabase
+    const { data: currentLoser, error: loserFetchError } = await supabase
       .from('clans')
       .select('points, matches_played, matches_lost, current_win_streak, current_loss_streak')
       .eq('id', loserClanId)
       .single()
+
+    if (loserFetchError) {
+      console.error('Error fetching loser clan:', loserFetchError)
+      setSubmitting(false)
+      return { error: loserFetchError }
+    }
 
     if (currentLoser) {
       const loser = currentLoser as any
@@ -485,7 +513,108 @@ export function useReportMatch() {
         current_win_streak: 0,
         current_loss_streak: (loser.current_loss_streak || 0) + 1
       }
-      await (supabase.from('clans') as any).update(loserUpdate).eq('id', loserClanId)
+
+      const { error: loserUpdateError } = await (supabase
+        .from('clans') as any)
+        .update(loserUpdate)
+        .eq('id', loserClanId)
+
+      if (loserUpdateError) {
+        console.error('Error updating loser clan:', loserUpdateError)
+        setSubmitting(false)
+        return { error: loserUpdateError }
+      }
+    }
+
+    // Update warrior stats for all participants
+    if (winnerParticipants.length > 0) {
+      console.log(`Updating ${winnerParticipants.length} winner warriors...`)
+      for (const userId of winnerParticipants) {
+        const { data: profile, error: profileFetchError } = await supabase
+          .from('profiles')
+          .select('warrior_wins, warrior_points, current_win_streak, current_loss_streak, max_win_streak')
+          .eq('id', userId)
+          .single()
+
+        if (profileFetchError) {
+          console.error('Error fetching winner warrior profile:', profileFetchError)
+          setSubmitting(false)
+          return { error: profileFetchError }
+        }
+
+        if (profile) {
+          const warrior = profile as any
+          const newWinStreak = (warrior.current_win_streak || 0) + 1
+
+          const updateData = {
+            warrior_wins: (warrior.warrior_wins || 0) + 1,
+            warrior_points: (warrior.warrior_points || 0) + pointsAwarded,
+            current_win_streak: newWinStreak,
+            current_loss_streak: 0,
+            max_win_streak: Math.max(warrior.max_win_streak || 0, newWinStreak)
+          }
+
+          console.log(`Updating winner warrior ${userId}:`, updateData)
+
+          const { error: profileUpdateError } = await (supabase
+            .from('profiles') as any)
+            .update(updateData)
+            .eq('id', userId)
+
+          if (profileUpdateError) {
+            console.error('Error updating winner warrior:', profileUpdateError)
+            setSubmitting(false)
+            return { error: profileUpdateError }
+          }
+
+          console.log(`Successfully updated winner warrior ${userId}`)
+        }
+      }
+    }
+
+    if (loserParticipants.length > 0) {
+      console.log(`Updating ${loserParticipants.length} loser warriors...`)
+      for (const userId of loserParticipants) {
+        const { data: profile, error: profileFetchError } = await supabase
+          .from('profiles')
+          .select('warrior_losses, warrior_points, current_win_streak, current_loss_streak')
+          .eq('id', userId)
+          .single()
+
+        if (profileFetchError) {
+          console.error('Error fetching loser warrior profile:', profileFetchError)
+          setSubmitting(false)
+          return { error: profileFetchError }
+        }
+
+        if (profile) {
+          const warrior = profile as any
+          const newLossStreak = (warrior.current_loss_streak || 0) + 1
+          const newPoints = Math.max(0, (warrior.warrior_points || 0) - loserPenalty)
+
+          const updateData = {
+            warrior_losses: (warrior.warrior_losses || 0) + 1,
+            warrior_points: newPoints,
+            current_win_streak: 0,
+            current_loss_streak: newLossStreak
+          }
+
+          console.log(`Updating loser warrior ${userId}:`, updateData)
+
+          const { error: profileUpdateError } = await (supabase
+            .from('profiles') as any)
+            .update(updateData)
+            .eq('id', userId)
+
+          if (profileUpdateError) {
+            console.error('Error updating loser warrior:', profileUpdateError)
+            setSubmitting(false)
+            return { error: profileUpdateError }
+          }
+
+          console.log(`Successfully updated loser warrior ${userId}`)
+        }
+      }
     }
 
     setSubmitting(false)
@@ -509,6 +638,12 @@ export function useRankings(seasonId?: string | null) {
   const [error, setError] = useState<string | null>(null)
 
   const fetchRankings = useCallback(async () => {
+    // Skip fetching if seasonId is 'SKIP'
+    if (seasonId === 'SKIP') {
+      setLoading(false)
+      return
+    }
+
     if (!isSupabaseConfigured()) {
       setLoading(false)
       return

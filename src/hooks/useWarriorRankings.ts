@@ -12,6 +12,12 @@ export function useWarriorRankings(seasonId?: string | null) {
   const [error, setError] = useState<string | null>(null)
 
   const fetchWarriors = useCallback(async () => {
+    // Skip fetching if seasonId is 'SKIP'
+    if (seasonId === 'SKIP') {
+      setLoading(false)
+      return
+    }
+
     if (!isSupabaseConfigured()) {
       setLoading(false)
       return
