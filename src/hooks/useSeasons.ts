@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type { Season } from '../types/database'
 
@@ -154,20 +154,29 @@ export function useCurrentSeason() {
     setLoading(false)
   }, [])
 
+  // Use a ref for the channel to ensure proper cleanup
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
   useEffect(() => {
     // Check rotation on initial load
     fetchCurrentSeason(true)
 
+    // Create unique channel name to avoid conflicts
+    const channelName = `seasons_changes_${Date.now()}_${Math.random().toString(36).slice(2)}`
+
     // Subscribe to changes
-    const subscription = supabase
-      .channel('seasons_changes')
+    channelRef.current = supabase
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'seasons' }, () => {
         fetchCurrentSeason(false)
       })
       .subscribe()
 
     return () => {
-      subscription.unsubscribe()
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
   }, [fetchCurrentSeason])
 
@@ -209,5 +218,25 @@ export function useSeasonActions() {
     return { error }
   }
 
-  return { startNewSeason, closeSeason, loading }
+  const updateSeason = async (seasonId: string, updates: {
+    name?: string
+    start_date?: string
+    end_date?: string
+  }) => {
+    if (!isSupabaseConfigured()) {
+      return { error: new Error('Supabase not configured') }
+    }
+
+    setLoading(true)
+
+    const { error } = await supabase
+      .from('seasons')
+      .update(updates)
+      .eq('id', seasonId)
+
+    setLoading(false)
+    return { error }
+  }
+
+  return { startNewSeason, closeSeason, updateSeason, loading }
 }

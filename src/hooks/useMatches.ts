@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type { Match, MatchWithClans, Clan, MatchMode, Profile } from '../types/database'
 import { useAuth } from '../contexts/AuthContext'
@@ -308,12 +308,18 @@ export function useRankings() {
     fetchRankings()
   }, [fetchRankings])
 
+  // Use a ref for the channel to ensure proper cleanup
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
   // Subscribe to realtime updates
   useEffect(() => {
     if (!isSupabaseConfigured()) return
 
-    const channel = supabase
-      .channel('rankings-changes')
+    // Create unique channel name to avoid conflicts
+    const channelName = `rankings_changes_${Date.now()}_${Math.random().toString(36).slice(2)}`
+
+    channelRef.current = supabase
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -328,7 +334,10 @@ export function useRankings() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
   }, [fetchRankings])
 

@@ -16,7 +16,8 @@ import {
   Play,
   StopCircle,
   Trophy,
-  Crown
+  Crown,
+  Edit3
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useAdmin, useAdminData } from '../hooks/useAdmin'
@@ -33,7 +34,7 @@ export function AdminPage() {
   const { isAdmin, loading: authLoading } = useAuth()
   const { users, clans, actions, loading, refetch } = useAdminData()
   const { seasons, loading: seasonsLoading, refetch: refetchSeasons } = useSeasons()
-  const { startNewSeason, closeSeason, loading: seasonActionLoading } = useSeasonActions()
+  const { startNewSeason, closeSeason, updateSeason, loading: seasonActionLoading } = useSeasonActions()
   const {
     deleteUser,
     deleteClan,
@@ -59,6 +60,12 @@ export function AdminPage() {
   const [adjustingUser, setAdjustingUser] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  // Season edit modal states
+  const [showEditSeasonModal, setShowEditSeasonModal] = useState(false)
+  const [editingSeason, setEditingSeason] = useState<any>(null)
+  const [editSeasonStartDate, setEditSeasonStartDate] = useState('')
+  const [editSeasonEndDate, setEditSeasonEndDate] = useState('')
 
   const currentSeason = seasons.find(s => s.is_active)
 
@@ -233,6 +240,34 @@ export function AdminPage() {
       setError(error.message)
     } else {
       setSuccess(`Season "${seasonName}" has been closed. Badges awarded!`)
+      refetchSeasons()
+      setTimeout(() => setSuccess(''), 3000)
+    }
+  }
+
+  const openEditSeasonModal = (season: any) => {
+    setEditingSeason(season)
+    // Format dates for datetime-local input (YYYY-MM-DDTHH:mm)
+    setEditSeasonStartDate(new Date(season.start_date).toISOString().slice(0, 16))
+    setEditSeasonEndDate(new Date(season.end_date).toISOString().slice(0, 16))
+    setShowEditSeasonModal(true)
+  }
+
+  const handleUpdateSeason = async () => {
+    if (!editingSeason) return
+
+    setError('')
+    const { error } = await updateSeason(editingSeason.id, {
+      start_date: new Date(editSeasonStartDate).toISOString(),
+      end_date: new Date(editSeasonEndDate).toISOString()
+    })
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setSuccess(`Season "${editingSeason.name}" has been updated!`)
+      setShowEditSeasonModal(false)
+      setEditingSeason(null)
       refetchSeasons()
       setTimeout(() => setSuccess(''), 3000)
     }
@@ -572,16 +607,26 @@ export function AdminPage() {
                             )}
                           </td>
                           <td className="table-cell text-right">
-                            {season.is_active && (
+                            <div className="flex items-center justify-end gap-1">
                               <button
-                                onClick={() => handleCloseSeason(season.id, season.name)}
+                                onClick={() => openEditSeasonModal(season)}
                                 disabled={seasonActionLoading}
-                                className="p-2 text-accent-danger hover:bg-accent-danger/20 rounded-lg transition-colors"
-                                title="End Season"
+                                className="p-2 text-accent-primary hover:bg-accent-primary/20 rounded-lg transition-colors"
+                                title="Edit Season Dates"
                               >
-                                <StopCircle className="w-4 h-4" />
+                                <Edit3 className="w-4 h-4" />
                               </button>
-                            )}
+                              {season.is_active && (
+                                <button
+                                  onClick={() => handleCloseSeason(season.id, season.name)}
+                                  disabled={seasonActionLoading}
+                                  className="p-2 text-accent-danger hover:bg-accent-danger/20 rounded-lg transition-colors"
+                                  title="End Season"
+                                >
+                                  <StopCircle className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -855,6 +900,63 @@ export function AdminPage() {
                   Start Season
                 </>
               )}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Season Modal */}
+      <Modal
+        isOpen={showEditSeasonModal}
+        onClose={() => {
+          setShowEditSeasonModal(false)
+          setEditingSeason(null)
+          setEditSeasonStartDate('')
+          setEditSeasonEndDate('')
+          setError('')
+        }}
+        title={`Edit Season - ${editingSeason?.name || ''}`}
+      >
+        <div className="space-y-4">
+          {error && <Alert type="error" message={error} />}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Start Date
+            </label>
+            <input
+              type="datetime-local"
+              value={editSeasonStartDate}
+              onChange={(e) => setEditSeasonStartDate(e.target.value)}
+              className="input-field"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              End Date
+            </label>
+            <input
+              type="datetime-local"
+              value={editSeasonEndDate}
+              onChange={(e) => setEditSeasonEndDate(e.target.value)}
+              className="input-field"
+            />
+          </div>
+
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => setShowEditSeasonModal(false)}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleUpdateSeason}
+              disabled={!editSeasonStartDate || !editSeasonEndDate || seasonActionLoading}
+              className="btn-primary"
+            >
+              {seasonActionLoading ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </div>

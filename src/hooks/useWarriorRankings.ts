@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type { Profile, Clan, WarriorRanking } from '../types/database'
 
@@ -119,19 +119,28 @@ export function useWarriorRankings(seasonId?: string | null) {
     setLoading(false)
   }, [seasonId])
 
+  // Use a ref for the channel to ensure proper cleanup
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
   useEffect(() => {
     fetchWarriors()
 
+    // Create unique channel name to avoid conflicts
+    const channelName = `warrior_rankings_${Date.now()}_${Math.random().toString(36).slice(2)}`
+
     // Subscribe to profile changes
-    const subscription = supabase
-      .channel('warrior_rankings')
+    channelRef.current = supabase
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
         fetchWarriors()
       })
       .subscribe()
 
     return () => {
-      subscription.unsubscribe()
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
   }, [fetchWarriors])
 

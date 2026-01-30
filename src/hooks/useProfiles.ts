@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type { Profile, ProfileWithClan, MatchWithClans, Clan, ClanMember } from '../types/database'
 
@@ -198,12 +198,18 @@ export function useOnlineUsers() {
     return () => clearInterval(interval)
   }, [fetchOnlineUsers])
 
+  // Use a ref for the channel to ensure proper cleanup
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
   // Subscribe to realtime presence changes
   useEffect(() => {
     if (!isSupabaseConfigured()) return
 
-    const channel = supabase
-      .channel('online-users')
+    // Create unique channel name to avoid conflicts
+    const channelName = `online_users_${Date.now()}_${Math.random().toString(36).slice(2)}`
+
+    channelRef.current = supabase
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -219,7 +225,10 @@ export function useOnlineUsers() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
   }, [fetchOnlineUsers])
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type { Clan, ClanWithMembers, ClanMember, Profile, ClanInvitation } from '../types/database'
 import { useAuth } from '../contexts/AuthContext'
@@ -560,12 +560,18 @@ export function usePendingInvitations() {
     fetchInvitations()
   }, [fetchInvitations])
 
+  // Use a ref for the channel to ensure proper cleanup
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
   // Realtime subscription for new invitations
   useEffect(() => {
     if (!user || !isSupabaseConfigured()) return
 
-    const channel = supabase
-      .channel('invitation-changes')
+    // Create unique channel name to avoid conflicts
+    const channelName = `invitation_changes_${user.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`
+
+    channelRef.current = supabase
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -581,7 +587,10 @@ export function usePendingInvitations() {
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
     }
   }, [user, fetchInvitations])
 

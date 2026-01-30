@@ -96,12 +96,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     let mounted = true
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
 
-    // Get initial session
+    // Get initial session with timeout
     const initSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        // Add timeout to prevent hanging
+        const sessionPromise = supabase.auth.getSession()
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error('Session initialization timeout'))
+          }, 10000) // 10 second timeout
+        })
 
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise])
+
+        if (timeoutId) clearTimeout(timeoutId)
         if (!mounted) return
 
         setSession(session)
@@ -118,7 +128,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error('Error initializing session:', error)
+        // Clear potentially corrupted session data
+        if (mounted) {
+          try {
+            await supabase.auth.signOut()
+          } catch (e) {
+            // Ignore signout errors
+          }
+          setSession(null)
+          setUser(null)
+          setProfile(null)
+          setClan(null)
+        }
       } finally {
+        if (timeoutId) clearTimeout(timeoutId)
         if (mounted) setLoading(false)
       }
     }

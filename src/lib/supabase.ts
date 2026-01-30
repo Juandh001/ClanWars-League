@@ -19,8 +19,28 @@ export const isSupabaseConfigured = () => {
 
 // Cleanup all realtime channels - call this on app init if needed
 export const cleanupRealtimeChannels = async () => {
-  const channels = supabase.getChannels()
-  for (const channel of channels) {
-    await supabase.removeChannel(channel)
+  try {
+    const channels = supabase.getChannels()
+    for (const channel of channels) {
+      try {
+        await supabase.removeChannel(channel)
+      } catch (e) {
+        // Ignore individual channel removal errors
+      }
+    }
+  } catch (e) {
+    // Ignore errors during cleanup
+  }
+}
+
+// Force disconnect and reconnect realtime
+export const resetRealtimeConnection = async () => {
+  try {
+    await cleanupRealtimeChannels()
+    // Disconnect and reconnect the realtime client
+    supabase.realtime.disconnect()
+    supabase.realtime.connect()
+  } catch (e) {
+    // Ignore errors
   }
 }
