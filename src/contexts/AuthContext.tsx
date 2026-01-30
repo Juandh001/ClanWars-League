@@ -96,22 +96,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     let mounted = true
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let subscription: any = null
 
-    // Get initial session with timeout
-    const initSession = async () => {
+    // Get initial session and then listen for changes
+    const init = async () => {
       try {
-        // Add timeout to prevent hanging
-        const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            reject(new Error('Session initialization timeout'))
-          }, 10000) // 10 second timeout
-        })
+        const { data: { session } } = await supabase.auth.getSession()
 
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise])
-
-        if (timeoutId) clearTimeout(timeoutId)
         if (!mounted) return
 
         setSession(session)
@@ -126,56 +117,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           updateOnlineStatus(session.user.id, true)
         }
+
+        setLoading(false)
+
+        // Now listen for auth changes
+        const { data } = supabase.auth.onAuthStateChange(
+          async (event, session) => {
+            if (!mounted) return
+
+            setSession(session)
+            setUser(session?.user ?? null)
+
+            if (session?.user) {
+              const profileData = await fetchProfile(session.user.id)
+              if (mounted) setProfile(profileData)
+
+              const clanData = await fetchUserClan(session.user.id)
+              if (mounted) setClan(clanData)
+
+              updateOnlineStatus(session.user.id, true)
+            } else {
+              setProfile(null)
+              setClan(null)
+            }
+          }
+        )
+
+        subscription = data.subscription
       } catch (error) {
         console.error('Error initializing session:', error)
-        // Clear potentially corrupted session data
-        if (mounted) {
-          try {
-            await supabase.auth.signOut()
-          } catch (e) {
-            // Ignore signout errors
-          }
-          setSession(null)
-          setUser(null)
-          setProfile(null)
-          setClan(null)
-        }
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId)
         if (mounted) setLoading(false)
       }
     }
 
-    initSession()
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return
-
-        setSession(session)
-        setUser(session?.user ?? null)
-
-        if (session?.user) {
-          const profileData = await fetchProfile(session.user.id)
-          if (mounted) setProfile(profileData)
-
-          const clanData = await fetchUserClan(session.user.id)
-          if (mounted) setClan(clanData)
-
-          updateOnlineStatus(session.user.id, true)
-        } else {
-          setProfile(null)
-          setClan(null)
-        }
-
-        setLoading(false)
-      }
-    )
+    init()
 
     return () => {
       mounted = false
-      subscription.unsubscribe()
+      if (subscription) {
+        subscription.unsubscribe()
+      }
     }
   }, [fetchProfile, fetchUserClan, updateOnlineStatus])
 

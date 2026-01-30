@@ -580,7 +580,7 @@ function ReportLossModal({
   const { clan: userClan } = useAuth()
 
   const [winnerClanId, setWinnerClanId] = useState('')
-  const [matchMode, setMatchMode] = useState<MatchMode>('5v5')
+  const [matchMode, setMatchMode] = useState<MatchMode>('1v1')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
@@ -684,7 +684,7 @@ function ReportLossModal({
         onSuccess()
         setSuccess(false)
         setWinnerClanId('')
-        setMatchMode('5v5')
+        setMatchMode('1v1')
         setNotes('')
         setSelectedWinnerPlayers([])
         setSelectedLoserPlayers([])
