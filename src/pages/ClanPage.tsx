@@ -727,13 +727,13 @@ function ReportLossModal({
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Match Mode *
             </label>
-            <div className="grid grid-cols-6 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               {MATCH_MODES.map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => handleModeChange(mode)}
-                  className={`py-2 px-3 rounded-lg font-medium text-sm transition-all ${
+                  className={`py-2 px-2 sm:px-3 rounded-lg font-medium text-xs sm:text-sm transition-all ${
                     matchMode === mode
                       ? 'bg-accent-primary text-white'
                       : 'bg-dark-700 text-gray-400 hover:bg-dark-600'
@@ -770,10 +770,10 @@ function ReportLossModal({
 
           {/* Participant Selection - Only show when winner is selected */}
           {winnerClanId && (
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Winner Team Roster */}
-              <div className="bg-dark-700/50 rounded-lg p-4">
-                <h4 className="font-semibold text-accent-success mb-3 flex items-center justify-between">
+              <div className="bg-dark-700/50 rounded-lg p-3 sm:p-4">
+                <h4 className="font-semibold text-accent-success mb-3 flex items-center justify-between text-sm sm:text-base">
                   <span className="flex items-center gap-2">
                     <Trophy className="w-4 h-4" />
                     Winner [{selectedWinnerClan?.tag}]
@@ -787,7 +787,7 @@ function ReportLossModal({
                 ) : winnerMembers.length === 0 ? (
                   <p className="text-gray-400 text-sm">No players found</p>
                 ) : (
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                  <div className="space-y-2 max-h-48 sm:max-h-40 overflow-y-auto">
                     {winnerMembers.map((member) => (
                       <label
                         key={member.id}
@@ -825,8 +825,8 @@ function ReportLossModal({
               </div>
 
               {/* Loser Team Roster (Our Team) */}
-              <div className="bg-dark-700/50 rounded-lg p-4">
-                <h4 className="font-semibold text-accent-danger mb-3 flex items-center justify-between">
+              <div className="bg-dark-700/50 rounded-lg p-3 sm:p-4">
+                <h4 className="font-semibold text-accent-danger mb-3 flex items-center justify-between text-sm sm:text-base">
                   <span className="flex items-center gap-2">
                     <Users className="w-4 h-4" />
                     Our Team [{userClan?.tag}]
@@ -840,7 +840,7 @@ function ReportLossModal({
                 ) : loserMembers.length === 0 ? (
                   <p className="text-gray-400 text-sm">No players found</p>
                 ) : (
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                  <div className="space-y-2 max-h-48 sm:max-h-40 overflow-y-auto">
                     {loserMembers.map((member) => (
                       <label
                         key={member.id}
@@ -894,8 +894,8 @@ function ReportLossModal({
           </div>
 
           {/* Points Info */}
-          <div className="bg-dark-700/50 rounded-lg p-4">
-            <p className="text-sm text-gray-400">
+          <div className="bg-dark-700/50 rounded-lg p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-gray-400">
               <strong className="text-white">Power Points (PP) System:</strong>
               <br />
               Base: 100 PP × Format Multiplier
@@ -906,14 +906,14 @@ function ReportLossModal({
             </p>
           </div>
 
-          <div className="flex gap-3 justify-end">
-            <button type="button" onClick={onClose} className="btn-secondary">
+          <div className="flex flex-col-reverse sm:flex-row gap-3 justify-end">
+            <button type="button" onClick={onClose} className="btn-secondary w-full sm:w-auto">
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting || !winnerClanId || selectedWinnerPlayers.length !== playersRequired || selectedLoserPlayers.length !== playersRequired}
-              className="btn-danger"
+              className="btn-danger w-full sm:w-auto"
             >
               {submitting ? 'Reporting...' : 'Report Loss'}
             </button>

@@ -36,7 +36,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -47,14 +47,16 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       <div
         className={`
           relative w-full ${sizeClasses[size]}
+          max-h-[90vh] sm:max-h-[85vh]
           bg-dark-800 border border-dark-600 rounded-xl
           shadow-2xl shadow-black/50
           animate-in fade-in zoom-in-95 duration-200
+          flex flex-col
         `}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-dark-600">
-          <h2 className="text-xl font-display font-bold text-white">{title}</h2>
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-dark-600 flex-shrink-0">
+          <h2 className="text-lg sm:text-xl font-display font-bold text-white">{title}</h2>
           <button
             onClick={onClose}
             className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-dark-600 transition-colors"
@@ -63,8 +65,8 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6">{children}</div>
+        {/* Content - Scrollable */}
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   )
