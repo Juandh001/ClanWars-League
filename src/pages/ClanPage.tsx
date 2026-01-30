@@ -645,6 +645,11 @@ function ReportLossModal({
     e.preventDefault()
     setError('')
 
+    // Prevent duplicate submissions
+    if (submitting) {
+      return
+    }
+
     if (!winnerClanId) {
       setError('Please select the winning clan')
       return

@@ -391,6 +391,13 @@ export function useReportMatch() {
     setSubmitting(true)
 
     try {
+      // Log the arrays being sent
+      console.log('=== SENDING TO report_match ===')
+      console.log('Winner participants:', winnerParticipants)
+      console.log('Loser participants:', loserParticipants)
+      console.log('Winner IDs count:', winnerParticipants.length)
+      console.log('Loser IDs count:', loserParticipants.length)
+
       // Call the database function to report the match
       // This function runs with elevated privileges and bypasses RLS
       const { data: matchResult, error: rpcError } = await (supabase.rpc as any)('report_match', {
