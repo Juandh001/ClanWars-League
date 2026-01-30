@@ -1,21 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import type { Match, MatchWithClans, Clan, MatchMode, Profile } from '../types/database'
+import type { MatchWithClans, Clan, MatchMode, Profile } from '../types/database'
 import { useAuth } from '../contexts/AuthContext'
 
-// Points Configuration
-const BASE_POINTS_WIN = 100
-const BASE_POINTS_LOSS = 0 // No penalty for losing
+// =============================================================================
+// POINTS CONFIGURATION - New Skill-Based System
+// =============================================================================
 
-// Format multipliers - rewards coordination difficulty
-const FORMAT_MULTIPLIERS: Record<MatchMode, number> = {
-  '1v1': 1.0,
-  '2v2': 1.2,
-  '3v3': 1.5,
-  '4v4': 1.8,
-  '5v5': 2.2,
-  '6v6': 2.5
-}
+const BASE_POINTS_WIN = 100 // Base points for winning
+const LOSS_PENALTY_PERCENT = 0.30 // Loser loses 30% of what winner gains
+const MAX_BONUS_PERCENT = 0.60 // Maximum bonus: 60% of base points
+const MAX_RANK_DIFF = 50 // Maximum rank difference for bonus calculation
 
 // Match mode helpers
 export const MATCH_MODES: MatchMode[] = ['1v1', '2v2', '3v3', '4v4', '5v5', '6v6']
@@ -24,21 +19,229 @@ export function getPlayersPerTeam(mode: MatchMode): number {
   return parseInt(mode.charAt(0))
 }
 
-// Calculate match points based on format
-export function calculateMatchPoints(
-  matchMode: MatchMode,
-  isWin: boolean
-): { points: number; multiplier: number; basePoints: number } {
-  const basePoints = isWin ? BASE_POINTS_WIN : BASE_POINTS_LOSS
-  const multiplier = FORMAT_MULTIPLIERS[matchMode]
-  const points = Math.round(basePoints * multiplier)
+// =============================================================================
+// RANKING HELPER FUNCTIONS
+// =============================================================================
+
+// Get all clans ordered by points (returns position/rank for each clan)
+export async function getClanRankings(): Promise<Map<string, number>> {
+  const rankMap = new Map<string, number>()
+
+  if (!isSupabaseConfigured()) return rankMap
+
+  const { data } = await supabase
+    .from('clans')
+    .select('id')
+    .order('points', { ascending: false })
+    .order('matches_won', { ascending: false })
+
+  if (data) {
+    (data as { id: string }[]).forEach((clan, index) => {
+      rankMap.set(clan.id, index + 1) // Rank starts at 1
+    })
+  }
+
+  return rankMap
+}
+
+// Get all warriors ordered by points (returns position/rank for each warrior)
+export async function getWarriorRankings(): Promise<Map<string, number>> {
+  const rankMap = new Map<string, number>()
+
+  if (!isSupabaseConfigured()) return rankMap
+
+  // Get all clan members
+  const { data: membersData } = await supabase
+    .from('clan_members')
+    .select('user_id')
+
+  if (!membersData || membersData.length === 0) return rankMap
+
+  const warriorIds = (membersData as { user_id: string }[]).map(m => m.user_id)
+
+  const { data: profilesData } = await supabase
+    .from('profiles')
+    .select('id, warrior_points')
+    .in('id', warriorIds)
+    .order('warrior_points', { ascending: false })
+
+  if (profilesData) {
+    (profilesData as { id: string; warrior_points: number }[]).forEach((profile, index) => {
+      rankMap.set(profile.id, index + 1) // Rank starts at 1
+    })
+  }
+
+  return rankMap
+}
+
+// Get clan members' IDs for a specific clan
+export async function getClanMemberIds(clanId: string): Promise<string[]> {
+  if (!isSupabaseConfigured()) return []
+
+  const { data } = await supabase
+    .from('clan_members')
+    .select('user_id')
+    .eq('clan_id', clanId)
+
+  return (data as { user_id: string }[] | null)?.map(m => m.user_id) || []
+}
+
+// Calculate average warrior rank for a clan's members
+export async function getAverageWarriorRankForClan(
+  clanId: string,
+  warriorRankings: Map<string, number>
+): Promise<number> {
+  const memberIds = await getClanMemberIds(clanId)
+
+  if (memberIds.length === 0) return 999 // No members = worst rank
+
+  const ranks = memberIds
+    .map(id => warriorRankings.get(id))
+    .filter((r): r is number => r !== undefined)
+
+  if (ranks.length === 0) return 999
+
+  return ranks.reduce((sum, rank) => sum + rank, 0) / ranks.length
+}
+
+// =============================================================================
+// CALCULATED RANK LOGIC
+// =============================================================================
+
+/**
+ * Calculate the "Calculated Rank" for the opponent.
+ *
+ * Rule: If the opponent's clan rank is better (lower number) than
+ * the average rank of their players, we average both values.
+ *
+ * This prevents clans with high-ranked position but low-skill players
+ * from being unfairly easy targets.
+ */
+export function calculateCalculatedRank(
+  clanRank: number,
+  avgPlayerRank: number
+): number {
+  // If clan rank is better (lower) than average player rank, average them
+  if (clanRank < avgPlayerRank) {
+    return (clanRank + avgPlayerRank) / 2
+  }
+  // Otherwise, use the average player rank as-is
+  return avgPlayerRank
+}
+
+// =============================================================================
+// BONUS SKILL CALCULATION
+// =============================================================================
+
+/**
+ * Calculate bonus skill points based on rank difference.
+ *
+ * Uses logarithmic formula for smooth scaling:
+ * BonusSkill = BaseSkill × MaxBonusPct × ln(1 + ΔRank) / ln(1 + MaxRankDiff)
+ *
+ * @param yourRank - Your clan's rank position
+ * @param opponentCalculatedRank - Opponent's calculated rank
+ * @param basePoints - Base points for the win
+ * @returns Bonus points (0 if opponent is lower ranked)
+ */
+export function calculateBonusSkill(
+  yourRank: number,
+  opponentCalculatedRank: number,
+  basePoints: number
+): number {
+  // Only get bonus if beating a higher-ranked opponent (lower rank number)
+  const rankDiff = yourRank - opponentCalculatedRank
+
+  if (rankDiff <= 0) return 0 // No bonus for beating lower-ranked opponents
+
+  // Logarithmic scaling factor
+  const factor = Math.log(1 + rankDiff) / Math.log(1 + MAX_RANK_DIFF)
+
+  // Calculate bonus (capped at MAX_BONUS_PERCENT of base)
+  const bonus = basePoints * MAX_BONUS_PERCENT * Math.min(factor, 1)
+
+  return Math.round(bonus)
+}
+
+// =============================================================================
+// MAIN POINTS CALCULATION
+// =============================================================================
+
+export interface MatchPointsResult {
+  winnerPoints: number
+  loserPenalty: number
+  basePoints: number
+  bonusSkill: number
+  winnerRank: number
+  loserCalculatedRank: number
+}
+
+/**
+ * Calculate match points using the new skill-based system.
+ *
+ * Winner gets: BasePoints + BonusSkill
+ * Loser loses: 30% of what winner gains
+ */
+export async function calculateMatchPointsAdvanced(
+  winnerClanId: string,
+  loserClanId: string
+): Promise<MatchPointsResult> {
+  // Fetch current rankings
+  const [clanRankings, warriorRankings] = await Promise.all([
+    getClanRankings(),
+    getWarriorRankings()
+  ])
+
+  // Get ranks for both clans
+  const winnerClanRank = clanRankings.get(winnerClanId) || 999
+  const loserClanRank = clanRankings.get(loserClanId) || 999
+
+  // Calculate average warrior ranks for both clans
+  const [winnerAvgWarriorRank, loserAvgWarriorRank] = await Promise.all([
+    getAverageWarriorRankForClan(winnerClanId, warriorRankings),
+    getAverageWarriorRankForClan(loserClanId, warriorRankings)
+  ])
+
+  // Calculate the "Calculated Rank" for the loser (opponent of winner)
+  const loserCalculatedRank = calculateCalculatedRank(loserClanRank, loserAvgWarriorRank)
+
+  // Winner's calculated rank (for display purposes)
+  const winnerCalculatedRank = calculateCalculatedRank(winnerClanRank, winnerAvgWarriorRank)
+
+  // Calculate bonus skill for winner
+  const bonusSkill = calculateBonusSkill(winnerCalculatedRank, loserCalculatedRank, BASE_POINTS_WIN)
+
+  // Total points for winner
+  const winnerPoints = BASE_POINTS_WIN + bonusSkill
+
+  // Penalty for loser (percentage of winner's gain)
+  const loserPenalty = Math.round(winnerPoints * LOSS_PENALTY_PERCENT)
 
   return {
-    points,
-    multiplier,
-    basePoints
+    winnerPoints,
+    loserPenalty,
+    basePoints: BASE_POINTS_WIN,
+    bonusSkill,
+    winnerRank: winnerCalculatedRank,
+    loserCalculatedRank
   }
 }
+
+// Legacy function for backward compatibility
+export function calculateMatchPoints(
+  _matchMode: MatchMode,
+  isWin: boolean
+): { points: number; multiplier: number; basePoints: number } {
+  return {
+    points: isWin ? BASE_POINTS_WIN : 0,
+    multiplier: 1,
+    basePoints: isWin ? BASE_POINTS_WIN : 0
+  }
+}
+
+// =============================================================================
+// HOOKS
+// =============================================================================
 
 export function useMatches(clanId?: string) {
   const [matches, setMatches] = useState<MatchWithClans[]>([])
@@ -73,7 +276,7 @@ export function useMatches(clanId?: string) {
     if (fetchError) {
       setError(fetchError.message)
     } else if (data) {
-      const formattedMatches = data.map(match => ({
+      const formattedMatches = (data as any[]).map(match => ({
         ...match,
         winner_clan: Array.isArray(match.winner_clan) ? match.winner_clan[0] : match.winner_clan,
         loser_clan: Array.isArray(match.loser_clan) ? match.loser_clan[0] : match.loser_clan,
@@ -114,7 +317,7 @@ export function useClanMembers(clanId: string | null) {
         .eq('clan_id', clanId)
 
       if (!error && data) {
-        const formattedMembers = data.map((m: any) => ({
+        const formattedMembers = (data as any[]).map((m) => ({
           ...(Array.isArray(m.profile) ? m.profile[0] : m.profile),
           clanRole: m.role as 'captain' | 'member'
         }))
@@ -156,7 +359,7 @@ export function useReportMatch() {
       return { error: new Error('You are not in a clan') }
     }
 
-    const loserClanId = membership.clan_id
+    const loserClanId = (membership as { clan_id: string }).clan_id
 
     // Can't report against own clan
     if (winnerClanId === loserClanId) {
@@ -176,10 +379,14 @@ export function useReportMatch() {
 
     setSubmitting(true)
 
-    // Calculate points based on match format
-    const { points: pointsAwarded, multiplier } = calculateMatchPoints(matchMode, true)
+    // =========================================================================
+    // NEW SKILL-BASED POINTS CALCULATION
+    // =========================================================================
+    const pointsResult = await calculateMatchPointsAdvanced(winnerClanId, loserClanId)
+    const pointsAwarded = pointsResult.winnerPoints
+    const loserPenalty = pointsResult.loserPenalty
 
-    // Create the match record (scores are automatic: winner=1, loser=0)
+    // Create the match record
     const { data: matchData, error: matchError } = await supabase
       .from('matches')
       .insert({
@@ -189,9 +396,10 @@ export function useReportMatch() {
         winner_score: 1,
         loser_score: 0,
         points_awarded: pointsAwarded,
+        power_points_bonus: pointsResult.bonusSkill, // Store bonus in power_points_bonus field
         match_mode: matchMode,
         notes
-      })
+      } as any)
       .select()
       .single()
 
@@ -200,27 +408,29 @@ export function useReportMatch() {
       return { error: matchError }
     }
 
+    const matchRecord = matchData as any
+
     // Insert match participants if provided
-    if (matchData && (winnerParticipants.length > 0 || loserParticipants.length > 0)) {
+    if (matchRecord && (winnerParticipants.length > 0 || loserParticipants.length > 0)) {
       const participantsToInsert = [
         ...winnerParticipants.map(userId => ({
-          match_id: matchData.id,
+          match_id: matchRecord.id,
           user_id: userId,
           clan_id: winnerClanId,
           team: 'winner' as const
         })),
         ...loserParticipants.map(userId => ({
-          match_id: matchData.id,
+          match_id: matchRecord.id,
           user_id: userId,
           clan_id: loserClanId,
           team: 'loser' as const
         }))
       ]
 
-      await supabase.from('match_participants').insert(participantsToInsert)
+      await supabase.from('match_participants').insert(participantsToInsert as any)
     }
 
-    // Update winner clan stats (direct update for reliability)
+    // Update winner clan stats
     const { data: currentWinner } = await supabase
       .from('clans')
       .select('points, matches_played, matches_won, current_win_streak, current_loss_streak, max_win_streak')
@@ -228,48 +438,48 @@ export function useReportMatch() {
       .single()
 
     if (currentWinner) {
-      const newWinStreak = (currentWinner.current_win_streak || 0) + 1
-      await supabase
-        .from('clans')
-        .update({
-          points: (currentWinner.points || 0) + pointsAwarded,
-          matches_played: (currentWinner.matches_played || 0) + 1,
-          matches_won: (currentWinner.matches_won || 0) + 1,
-          current_win_streak: newWinStreak,
-          current_loss_streak: 0,
-          max_win_streak: Math.max(currentWinner.max_win_streak || 0, newWinStreak)
-        })
-        .eq('id', winnerClanId)
+      const winner = currentWinner as any
+      const newWinStreak = (winner.current_win_streak || 0) + 1
+      const winnerUpdate = {
+        points: (winner.points || 0) + pointsAwarded,
+        matches_played: (winner.matches_played || 0) + 1,
+        matches_won: (winner.matches_won || 0) + 1,
+        current_win_streak: newWinStreak,
+        current_loss_streak: 0,
+        max_win_streak: Math.max(winner.max_win_streak || 0, newWinStreak)
+      }
+      await (supabase.from('clans') as any).update(winnerUpdate).eq('id', winnerClanId)
     }
 
-    // Update loser clan stats (direct update for reliability)
+    // Update loser clan stats (with penalty)
     const { data: currentLoser } = await supabase
       .from('clans')
-      .select('matches_played, matches_lost, current_win_streak, current_loss_streak')
+      .select('points, matches_played, matches_lost, current_win_streak, current_loss_streak')
       .eq('id', loserClanId)
       .single()
 
     if (currentLoser) {
-      await supabase
-        .from('clans')
-        .update({
-          matches_played: (currentLoser.matches_played || 0) + 1,
-          matches_lost: (currentLoser.matches_lost || 0) + 1,
-          current_win_streak: 0,
-          current_loss_streak: (currentLoser.current_loss_streak || 0) + 1
-        })
-        .eq('id', loserClanId)
+      const loser = currentLoser as any
+      const newPoints = Math.max(0, (loser.points || 0) - loserPenalty) // Don't go below 0
+      const loserUpdate = {
+        points: newPoints,
+        matches_played: (loser.matches_played || 0) + 1,
+        matches_lost: (loser.matches_lost || 0) + 1,
+        current_win_streak: 0,
+        current_loss_streak: (loser.current_loss_streak || 0) + 1
+      }
+      await (supabase.from('clans') as any).update(loserUpdate).eq('id', loserClanId)
     }
-
-    // Note: Warrior stats are updated automatically by the database trigger
-    // (trigger_update_warrior_stats) when participants are inserted into match_participants
 
     setSubmitting(false)
     return {
       error: null,
-      data: matchData,
+      data: matchRecord,
       pointsAwarded,
-      formatMultiplier: multiplier
+      loserPenalty,
+      bonusSkill: pointsResult.bonusSkill,
+      winnerRank: pointsResult.winnerRank,
+      loserCalculatedRank: pointsResult.loserCalculatedRank
     }
   }
 
@@ -298,7 +508,7 @@ export function useRankings() {
     if (fetchError) {
       setError(fetchError.message)
     } else {
-      setRankings(data || [])
+      setRankings((data || []) as Clan[])
     }
 
     setLoading(false)
