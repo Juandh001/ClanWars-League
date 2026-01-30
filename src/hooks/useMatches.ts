@@ -243,7 +243,7 @@ export function calculateMatchPoints(
 // HOOKS
 // =============================================================================
 
-export function useMatches(clanId?: string) {
+export function useMatches(clanId?: string, seasonId?: string | null) {
   const [matches, setMatches] = useState<MatchWithClans[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -271,6 +271,11 @@ export function useMatches(clanId?: string) {
       query = query.or(`winner_clan_id.eq.${clanId},loser_clan_id.eq.${clanId}`)
     }
 
+    // Filter by season if seasonId is provided
+    if (seasonId) {
+      query = query.eq('season_id', seasonId)
+    }
+
     const { data, error: fetchError } = await query
 
     if (fetchError) {
@@ -286,7 +291,7 @@ export function useMatches(clanId?: string) {
     }
 
     setLoading(false)
-  }, [clanId])
+  }, [clanId, seasonId])
 
   useEffect(() => {
     fetchMatches()
@@ -380,6 +385,17 @@ export function useReportMatch() {
     setSubmitting(true)
 
     // =========================================================================
+    // GET CURRENT ACTIVE SEASON
+    // =========================================================================
+    const { data: activeSeason } = await supabase
+      .from('seasons')
+      .select('id')
+      .eq('is_active', true)
+      .single()
+
+    const currentSeasonId = (activeSeason as { id: string } | null)?.id || null
+
+    // =========================================================================
     // NEW SKILL-BASED POINTS CALCULATION
     // =========================================================================
     const pointsResult = await calculateMatchPointsAdvanced(winnerClanId, loserClanId)
@@ -398,6 +414,7 @@ export function useReportMatch() {
         points_awarded: pointsAwarded,
         power_points_bonus: pointsResult.bonusSkill, // Store bonus in power_points_bonus field
         match_mode: matchMode,
+        season_id: currentSeasonId, // Assign to current active season
         notes
       } as any)
       .select()
@@ -486,7 +503,7 @@ export function useReportMatch() {
   return { reportLoss, submitting }
 }
 
-export function useRankings() {
+export function useRankings(seasonId?: string | null) {
   const [rankings, setRankings] = useState<Clan[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -499,20 +516,50 @@ export function useRankings() {
 
     setLoading(true)
 
-    const { data, error: fetchError } = await supabase
-      .from('clans')
-      .select('*')
-      .order('points', { ascending: false })
-      .order('matches_won', { ascending: false })
+    // If seasonId is provided, fetch from season_clan_stats
+    if (seasonId) {
+      const { data, error: fetchError } = await supabase
+        .from('season_clan_stats')
+        .select(`
+          *,
+          clan:clans(*)
+        `)
+        .eq('season_id', seasonId)
+        .order('final_rank', { ascending: true })
 
-    if (fetchError) {
-      setError(fetchError.message)
+      if (fetchError) {
+        setError(fetchError.message)
+      } else {
+        // Map season stats to Clan format
+        const mappedRankings = (data || []).map((stat: any) => ({
+          ...stat.clan,
+          points: stat.points,
+          matches_played: stat.matches_played,
+          matches_won: stat.matches_won,
+          matches_lost: stat.matches_lost,
+          max_win_streak: stat.max_win_streak,
+          current_win_streak: 0,
+          current_loss_streak: 0
+        })) as Clan[]
+        setRankings(mappedRankings)
+      }
     } else {
-      setRankings((data || []) as Clan[])
+      // Fetch current rankings from clans table
+      const { data, error: fetchError } = await supabase
+        .from('clans')
+        .select('*')
+        .order('points', { ascending: false })
+        .order('matches_won', { ascending: false })
+
+      if (fetchError) {
+        setError(fetchError.message)
+      } else {
+        setRankings((data || []) as Clan[])
+      }
     }
 
     setLoading(false)
-  }, [])
+  }, [seasonId])
 
   useEffect(() => {
     fetchRankings()

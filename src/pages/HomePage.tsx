@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Trophy,
@@ -24,13 +24,40 @@ import { StatusIndicator } from '../components/ui/StatusIndicator'
 import { format } from 'date-fns'
 
 export function HomePage() {
-  const { rankings, loading: clansLoading } = useRankings()
-  const { warriors, loading: warriorsLoading } = useWarriorRankings()
-  const { matches, loading: matchesLoading } = useMatches()
   const { seasons } = useSeasons()
   const { season: currentSeason } = useCurrentSeason()
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Initialize selectedSeasonId with current season when it loads
+  useEffect(() => {
+    if (currentSeason && selectedSeasonId === null) {
+      setSelectedSeasonId(currentSeason.id)
+    }
+  }, [currentSeason, selectedSeasonId])
+
+  // Determine if we should filter by season
+  // Only pass seasonId if a past (non-active) season is selected
+  const selectedSeason = useMemo(() =>
+    seasons.find(s => s.id === selectedSeasonId),
+    [seasons, selectedSeasonId]
+  )
+
+  // For rankings/warriors: use seasonId only for past seasons (historical data)
+  // For current/active season or null, use live data from clans/profiles tables
+  const historicalSeasonId = useMemo(() => {
+    if (!selectedSeasonId) return null
+    // If selected season is active, use live data (null)
+    if (selectedSeason?.is_active) return null
+    // Past season - use historical data
+    return selectedSeasonId
+  }, [selectedSeasonId, selectedSeason])
+
+  // Pass historicalSeasonId to filter clan/warrior rankings by season
+  const { rankings, loading: clansLoading } = useRankings(historicalSeasonId)
+  const { warriors, loading: warriorsLoading } = useWarriorRankings(historicalSeasonId)
+  // For matches, filter by seasonId
+  const { matches, loading: matchesLoading } = useMatches(undefined, selectedSeasonId)
 
   // Create a map of clan ID to rank position
   const clanRankMap = useMemo(() => {

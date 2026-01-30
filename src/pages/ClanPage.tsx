@@ -15,7 +15,8 @@ import {
   Star,
   Search,
   UserCheck,
-  Edit3
+  Edit3,
+  Zap
 } from 'lucide-react'
 import { useClan, useClanActions, useClans, useUserSearch } from '../hooks/useClans'
 import { useMatches, useReportMatch, useClanMembers, MATCH_MODES, getPlayersPerTeam } from '../hooks/useMatches'
