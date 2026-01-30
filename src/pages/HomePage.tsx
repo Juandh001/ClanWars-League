@@ -58,10 +58,22 @@ export function HomePage() {
 
   // Pass historicalSeasonId to filter clan/warrior rankings by season
   // Only call hooks when we have a selected season to avoid loading unfiltered data
-  const { rankings, loading: clansLoading } = useRankings(shouldLoadData ? historicalSeasonId : 'SKIP')
-  const { warriors, loading: warriorsLoading } = useWarriorRankings(shouldLoadData ? historicalSeasonId : 'SKIP')
+  const { rankings, loading: clansLoading, refetch: refetchRankings } = useRankings(shouldLoadData ? historicalSeasonId : 'SKIP')
+  const { warriors, loading: warriorsLoading, refetch: refetchWarriors } = useWarriorRankings(shouldLoadData ? historicalSeasonId : 'SKIP')
   // For matches, filter by seasonId
-  const { matches, loading: matchesLoading } = useMatches(undefined, shouldLoadData ? selectedSeasonId : 'SKIP')
+  const { matches, loading: matchesLoading, refetch: refetchMatches } = useMatches(undefined, shouldLoadData ? selectedSeasonId : 'SKIP')
+
+  // Listen for match-reported event to refresh all data
+  useEffect(() => {
+    const handleMatchReported = () => {
+      refetchRankings()
+      refetchWarriors()
+      refetchMatches()
+    }
+
+    window.addEventListener('match-reported', handleMatchReported)
+    return () => window.removeEventListener('match-reported', handleMatchReported)
+  }, [refetchRankings, refetchWarriors, refetchMatches])
 
   // Create a map of clan ID to rank position
   const clanRankMap = useMemo(() => {

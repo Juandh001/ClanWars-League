@@ -390,242 +390,45 @@ export function useReportMatch() {
 
     setSubmitting(true)
 
-    // =========================================================================
-    // GET CURRENT ACTIVE SEASON
-    // =========================================================================
-    const { data: activeSeason } = await supabase
-      .from('seasons')
-      .select('id')
-      .eq('is_active', true)
-      .single()
+    try {
+      // Call the database function to report the match
+      // This function runs with elevated privileges and bypasses RLS
+      const { data: matchResult, error: rpcError } = await (supabase.rpc as any)('report_match', {
+        p_winner_clan_id: winnerClanId,
+        p_loser_clan_id: loserClanId,
+        p_reported_by: user.id,
+        p_winner_score: 1,
+        p_loser_score: 0,
+        p_match_mode: matchMode,
+        p_notes: notes || null,
+        p_winner_player_ids: winnerParticipants,
+        p_loser_player_ids: loserParticipants
+      })
 
-    const currentSeasonId = (activeSeason as { id: string } | null)?.id || null
-
-    // =========================================================================
-    // NEW SKILL-BASED POINTS CALCULATION
-    // =========================================================================
-    const pointsResult = await calculateMatchPointsAdvanced(winnerClanId, loserClanId)
-    const pointsAwarded = pointsResult.winnerPoints
-    const loserPenalty = pointsResult.loserPenalty
-
-    // Create the match record
-    const { data: matchData, error: matchError } = await supabase
-      .from('matches')
-      .insert({
-        winner_clan_id: winnerClanId,
-        loser_clan_id: loserClanId,
-        reported_by: user.id,
-        winner_score: 1,
-        loser_score: 0,
-        points_awarded: pointsAwarded,
-        power_points_bonus: pointsResult.bonusSkill, // Store bonus in power_points_bonus field
-        match_mode: matchMode,
-        season_id: currentSeasonId, // Assign to current active season
-        notes
-      } as any)
-      .select()
-      .single()
-
-    if (matchError) {
-      setSubmitting(false)
-      return { error: matchError }
-    }
-
-    const matchRecord = matchData as any
-
-    // Insert match participants if provided
-    if (matchRecord && (winnerParticipants.length > 0 || loserParticipants.length > 0)) {
-      const participantsToInsert = [
-        ...winnerParticipants.map(userId => ({
-          match_id: matchRecord.id,
-          user_id: userId,
-          clan_id: winnerClanId,
-          team: 'winner' as const
-        })),
-        ...loserParticipants.map(userId => ({
-          match_id: matchRecord.id,
-          user_id: userId,
-          clan_id: loserClanId,
-          team: 'loser' as const
-        }))
-      ]
-
-      await supabase.from('match_participants').insert(participantsToInsert as any)
-    }
-
-    // Update winner clan stats
-    const { data: currentWinner, error: winnerFetchError } = await supabase
-      .from('clans')
-      .select('points, matches_played, matches_won, current_win_streak, current_loss_streak, max_win_streak')
-      .eq('id', winnerClanId)
-      .single()
-
-    if (winnerFetchError) {
-      console.error('Error fetching winner clan:', winnerFetchError)
-      setSubmitting(false)
-      return { error: winnerFetchError }
-    }
-
-    if (currentWinner) {
-      const winner = currentWinner as any
-      const newWinStreak = (winner.current_win_streak || 0) + 1
-      const winnerUpdate = {
-        points: (winner.points || 0) + pointsAwarded,
-        matches_played: (winner.matches_played || 0) + 1,
-        matches_won: (winner.matches_won || 0) + 1,
-        current_win_streak: newWinStreak,
-        current_loss_streak: 0,
-        max_win_streak: Math.max(winner.max_win_streak || 0, newWinStreak)
-      }
-
-      const { error: winnerUpdateError } = await (supabase
-        .from('clans') as any)
-        .update(winnerUpdate)
-        .eq('id', winnerClanId)
-
-      if (winnerUpdateError) {
-        console.error('Error updating winner clan:', winnerUpdateError)
+      if (rpcError) {
+        console.error('Error reporting match:', rpcError)
         setSubmitting(false)
-        return { error: winnerUpdateError }
+        return { error: rpcError }
       }
-    }
 
-    // Update loser clan stats (with penalty)
-    const { data: currentLoser, error: loserFetchError } = await supabase
-      .from('clans')
-      .select('points, matches_played, matches_lost, current_win_streak, current_loss_streak')
-      .eq('id', loserClanId)
-      .single()
+      console.log('Match reported successfully:', matchResult)
 
-    if (loserFetchError) {
-      console.error('Error fetching loser clan:', loserFetchError)
+      const result = matchResult as any
+
       setSubmitting(false)
-      return { error: loserFetchError }
-    }
-
-    if (currentLoser) {
-      const loser = currentLoser as any
-      const newPoints = Math.max(0, (loser.points || 0) - loserPenalty) // Don't go below 0
-      const loserUpdate = {
-        points: newPoints,
-        matches_played: (loser.matches_played || 0) + 1,
-        matches_lost: (loser.matches_lost || 0) + 1,
-        current_win_streak: 0,
-        current_loss_streak: (loser.current_loss_streak || 0) + 1
+      return {
+        error: null,
+        data: result,
+        pointsAwarded: result?.points_awarded || 0,
+        loserPenalty: 0, // Not returned by the function, can calculate if needed
+        bonusSkill: result?.power_points_bonus || 0,
+        winnerRank: 0, // Not returned by the function
+        loserCalculatedRank: 0 // Not returned by the function
       }
-
-      const { error: loserUpdateError } = await (supabase
-        .from('clans') as any)
-        .update(loserUpdate)
-        .eq('id', loserClanId)
-
-      if (loserUpdateError) {
-        console.error('Error updating loser clan:', loserUpdateError)
-        setSubmitting(false)
-        return { error: loserUpdateError }
-      }
-    }
-
-    // Update warrior stats for all participants
-    if (winnerParticipants.length > 0) {
-      console.log(`Updating ${winnerParticipants.length} winner warriors...`)
-      for (const userId of winnerParticipants) {
-        const { data: profile, error: profileFetchError } = await supabase
-          .from('profiles')
-          .select('warrior_wins, warrior_points, current_win_streak, current_loss_streak, max_win_streak')
-          .eq('id', userId)
-          .single()
-
-        if (profileFetchError) {
-          console.error('Error fetching winner warrior profile:', profileFetchError)
-          setSubmitting(false)
-          return { error: profileFetchError }
-        }
-
-        if (profile) {
-          const warrior = profile as any
-          const newWinStreak = (warrior.current_win_streak || 0) + 1
-
-          const updateData = {
-            warrior_wins: (warrior.warrior_wins || 0) + 1,
-            warrior_points: (warrior.warrior_points || 0) + pointsAwarded,
-            current_win_streak: newWinStreak,
-            current_loss_streak: 0,
-            max_win_streak: Math.max(warrior.max_win_streak || 0, newWinStreak)
-          }
-
-          console.log(`Updating winner warrior ${userId}:`, updateData)
-
-          const { error: profileUpdateError } = await (supabase
-            .from('profiles') as any)
-            .update(updateData)
-            .eq('id', userId)
-
-          if (profileUpdateError) {
-            console.error('Error updating winner warrior:', profileUpdateError)
-            setSubmitting(false)
-            return { error: profileUpdateError }
-          }
-
-          console.log(`Successfully updated winner warrior ${userId}`)
-        }
-      }
-    }
-
-    if (loserParticipants.length > 0) {
-      console.log(`Updating ${loserParticipants.length} loser warriors...`)
-      for (const userId of loserParticipants) {
-        const { data: profile, error: profileFetchError } = await supabase
-          .from('profiles')
-          .select('warrior_losses, warrior_points, current_win_streak, current_loss_streak')
-          .eq('id', userId)
-          .single()
-
-        if (profileFetchError) {
-          console.error('Error fetching loser warrior profile:', profileFetchError)
-          setSubmitting(false)
-          return { error: profileFetchError }
-        }
-
-        if (profile) {
-          const warrior = profile as any
-          const newLossStreak = (warrior.current_loss_streak || 0) + 1
-          const newPoints = Math.max(0, (warrior.warrior_points || 0) - loserPenalty)
-
-          const updateData = {
-            warrior_losses: (warrior.warrior_losses || 0) + 1,
-            warrior_points: newPoints,
-            current_win_streak: 0,
-            current_loss_streak: newLossStreak
-          }
-
-          console.log(`Updating loser warrior ${userId}:`, updateData)
-
-          const { error: profileUpdateError } = await (supabase
-            .from('profiles') as any)
-            .update(updateData)
-            .eq('id', userId)
-
-          if (profileUpdateError) {
-            console.error('Error updating loser warrior:', profileUpdateError)
-            setSubmitting(false)
-            return { error: profileUpdateError }
-          }
-
-          console.log(`Successfully updated loser warrior ${userId}`)
-        }
-      }
-    }
-
-    setSubmitting(false)
-    return {
-      error: null,
-      data: matchRecord,
-      pointsAwarded,
-      loserPenalty,
-      bonusSkill: pointsResult.bonusSkill,
-      winnerRank: pointsResult.winnerRank,
-      loserCalculatedRank: pointsResult.loserCalculatedRank
+    } catch (err) {
+      console.error('Unexpected error reporting match:', err)
+      setSubmitting(false)
+      return { error: err as Error }
     }
   }
 

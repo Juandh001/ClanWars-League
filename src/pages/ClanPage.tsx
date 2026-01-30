@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   Users,
@@ -35,11 +35,22 @@ import { format } from 'date-fns'
 export function ClanPage() {
   const { id } = useParams<{ id: string }>()
   const { clan, loading, refetch } = useClan(id)
-  const { matches } = useMatches(id)
+  const { matches, refetch: refetchMatches } = useMatches(id)
   const { badges } = useBadges(id, 'clan')
   const { user, clan: userClan } = useAuth()
   const { inviteMemberByNickname, kickMember } = useClanActions()
   const { results: searchResults, loading: searchLoading, searchUsers, clearResults } = useUserSearch()
+
+  // Listen for match-reported event to refresh clan data
+  useEffect(() => {
+    const handleMatchReported = () => {
+      refetch()
+      refetchMatches()
+    }
+
+    window.addEventListener('match-reported', handleMatchReported)
+    return () => window.removeEventListener('match-reported', handleMatchReported)
+  }, [refetch, refetchMatches])
 
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteNickname, setInviteNickname] = useState('')
@@ -672,6 +683,8 @@ function ReportLossModal({
         setNotes('')
         setSelectedWinnerPlayers([])
         setSelectedLoserPlayers([])
+        // Dispatch custom event to notify all components to refresh
+        window.dispatchEvent(new CustomEvent('match-reported'))
       }, 2500)
     }
   }
