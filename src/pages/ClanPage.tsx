@@ -319,15 +319,6 @@ export function ClanPage() {
                   </div>
                 )
               })}
-
-              {clan.members.length < 5 && (
-                <div className="p-4 bg-yellow-500/10 border-l-4 border-yellow-500">
-                  <p className="text-yellow-400 text-sm">
-                    Clan needs at least 5 members to participate in matches.
-                    ({5 - clan.members.length} more needed)
-                  </p>
-                </div>
-              )}
             </div>
           </div>
         </div>

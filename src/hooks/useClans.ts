@@ -430,16 +430,6 @@ export function useClanActions() {
       return { error: new Error('Cannot kick yourself. Transfer captaincy first.') }
     }
 
-    // Check minimum members
-    const { count } = await supabase
-      .from('clan_members')
-      .select('*', { count: 'exact', head: true })
-      .eq('clan_id', clanId)
-
-    if (count && count <= 5) {
-      return { error: new Error('Clan must have at least 5 members') }
-    }
-
     const { error } = await supabase
       .from('clan_members')
       .delete()
@@ -463,16 +453,6 @@ export function useClanActions() {
 
     if (clan?.captain_id === user.id) {
       return { error: new Error('Captain cannot leave. Transfer captaincy or disband the clan.') }
-    }
-
-    // Check minimum members
-    const { count } = await supabase
-      .from('clan_members')
-      .select('*', { count: 'exact', head: true })
-      .eq('clan_id', clanId)
-
-    if (count && count <= 5) {
-      return { error: new Error('Clan must have at least 5 members') }
     }
 
     const { error } = await supabase
