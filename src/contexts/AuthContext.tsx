@@ -183,10 +183,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { error: new Error('Supabase not configured') }
     }
 
+    // Use environment variable for redirect URL, fallback to current origin
+    const redirectUrl = import.meta.env.VITE_APP_URL || window.location.origin
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'discord',
       options: {
-        redirectTo: `${window.location.origin}/`
+        redirectTo: `${redirectUrl}/`
       }
     })
 
