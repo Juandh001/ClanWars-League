@@ -10,8 +10,7 @@ interface AuthContextType {
   clan: (Clan & { role: 'captain' | 'member' }) | null
   loading: boolean
   isAdmin: boolean
-  signUp: (email: string, password: string, nickname: string) => Promise<{ error: Error | null }>
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>
+  signInWithDiscord: () => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: Error | null }>
   refreshProfile: () => Promise<void>
@@ -179,52 +178,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, updateOnlineStatus])
 
-  const signUp = async (email: string, password: string, nickname: string) => {
+  const signInWithDiscord = async () => {
     if (!isSupabaseConfigured()) {
       return { error: new Error('Supabase not configured') }
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password
-    })
-
-    if (error) return { error }
-
-    if (data.user) {
-      // Create profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          email,
-          nickname,
-          role: 'user',
-          is_online: true
-        })
-
-      if (profileError) return { error: profileError }
-
-      // Auto-login after successful registration
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
-
-      if (signInError) return { error: signInError }
-    }
-
-    return { error: null }
-  }
-
-  const signIn = async (email: string, password: string) => {
-    if (!isSupabaseConfigured()) {
-      return { error: new Error('Supabase not configured') }
-    }
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'discord',
+      options: {
+        redirectTo: `${window.location.origin}/`
+      }
     })
 
     return { error }
@@ -263,8 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clan,
     loading,
     isAdmin,
-    signUp,
-    signIn,
+    signInWithDiscord,
     signOut,
     updateProfile,
     refreshProfile

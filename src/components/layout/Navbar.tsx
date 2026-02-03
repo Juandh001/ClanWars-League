@@ -263,11 +263,8 @@ export function Navbar() {
               </>
             ) : (
               <div className="flex items-center gap-3">
-                <Link to="/login" className="btn-secondary text-sm py-2">
-                  Login
-                </Link>
-                <Link to="/register" className="btn-primary text-sm py-2">
-                  Register
+                <Link to="/login" className="btn-primary text-sm py-2">
+                  Sign in with Discord
                 </Link>
               </div>
             )}

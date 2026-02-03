@@ -7,7 +7,6 @@ import { LoadingScreen } from './components/ui/LoadingSpinner'
 // Pages
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
-import { RegisterPage } from './pages/RegisterPage'
 import { ClanPage } from './pages/ClanPage'
 import { ClansListPage } from './pages/ClansListPage'
 import { PlayerPage } from './pages/PlayerPage'
@@ -62,14 +61,6 @@ function AppRoutes() {
           element={
             <PublicRoute>
               <LoginPage />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <PublicRoute>
-              <RegisterPage />
             </PublicRoute>
           }
         />

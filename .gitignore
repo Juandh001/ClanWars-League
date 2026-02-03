@@ -51,3 +51,5 @@ coverage/
 .vercel
 .netlify
 Thumbs.db
+
+nul
