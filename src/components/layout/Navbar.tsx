@@ -93,7 +93,7 @@ export function Navbar() {
               <Swords className="w-6 h-6 text-white" />
             </div>
             <span className="font-display text-xl font-bold gradient-text hidden sm:block">
-              ClanWars League
+              Halo Tournament League
             </span>
           </Link>
 

@@ -28,8 +28,8 @@ export function LoginPage() {
             <div className="inline-flex p-4 bg-gradient-to-br from-accent-primary to-accent-secondary rounded-2xl shadow-lg shadow-accent-primary/25 mb-4">
               <Swords className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-display font-bold mb-2">Welcome to Clan Wars</h1>
-            <p className="text-gray-400">Sign in with Discord to join the battle</p>
+            <h1 className="text-2xl font-display font-bold mb-2">Welcome to Halo Tournament League</h1>
+            <p className="text-gray-400">Sign in with Discord to join the competition</p>
           </div>
 
           {/* Error Message */}
