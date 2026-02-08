@@ -22,6 +22,8 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { useAdmin, useAdminData } from '../hooks/useAdmin'
 import { useSeasons, useSeasonActions } from '../hooks/useSeasons'
+import { useReportMatch, useClanMembers, MATCH_MODES, getPlayersPerTeam } from '../hooks/useMatches'
+import type { MatchMode } from '../types/database'
 import { LoadingScreen, LoadingSpinner } from '../components/ui/LoadingSpinner'
 import { Modal } from '../components/ui/Modal'
 import { Alert } from '../components/ui/Alert'
@@ -52,6 +54,7 @@ export function AdminPage() {
   const [showPointsModal, setShowPointsModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showSeasonModal, setShowSeasonModal] = useState(false)
+  const [showReportMatchModal, setShowReportMatchModal] = useState(false)
   const [selectedClan, setSelectedClan] = useState<any>(null)
   const [selectedUser, setSelectedUser] = useState<any>(null)
   const [pointsChange, setPointsChange] = useState('')
@@ -300,10 +303,19 @@ export function AdminPage() {
           </h1>
           <p className="text-gray-400 mt-1">Manage clans, users, and platform settings</p>
         </div>
-        <button onClick={refetch} className="btn-secondary flex items-center gap-2">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowReportMatchModal(true)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Trophy className="w-4 h-4" />
+            Report Match
+          </button>
+          <button onClick={refetch} className="btn-secondary flex items-center gap-2">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Alerts */}
@@ -985,6 +997,406 @@ export function AdminPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Admin Report Match Modal */}
+      <AdminReportMatchModal
+        isOpen={showReportMatchModal}
+        onClose={() => setShowReportMatchModal(false)}
+        clans={clans}
+        onSuccess={() => {
+          refetch()
+          setSuccess('Match reported successfully!')
+          setTimeout(() => setSuccess(''), 3000)
+        }}
+      />
     </div>
+  )
+}
+
+// Admin Report Match Modal Component
+function AdminReportMatchModal({
+  isOpen,
+  onClose,
+  clans,
+  onSuccess
+}: {
+  isOpen: boolean
+  onClose: () => void
+  clans: any[]
+  onSuccess: () => void
+}) {
+  const { reportMatchAsAdmin, submitting } = useReportMatch()
+
+  const [winnerClanId, setWinnerClanId] = useState('')
+  const [loserClanId, setLoserClanId] = useState('')
+  const [matchMode, setMatchMode] = useState<MatchMode>('1v1')
+  const [notes, setNotes] = useState('')
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const [pointsAwarded, setPointsAwarded] = useState(0)
+
+  // Participant selection
+  const [selectedWinnerPlayers, setSelectedWinnerPlayers] = useState<string[]>([])
+  const [selectedLoserPlayers, setSelectedLoserPlayers] = useState<string[]>([])
+
+  // Fetch members for both teams
+  const { members: winnerMembers, loading: winnerLoading } = useClanMembers(winnerClanId || null)
+  const { members: loserMembers, loading: loserLoading } = useClanMembers(loserClanId || null)
+
+  const playersRequired = getPlayersPerTeam(matchMode)
+
+  // Format multipliers for display
+  const FORMAT_MULTIPLIERS: Record<MatchMode, number> = {
+    '1v1': 1.0, '2v2': 1.2, '3v3': 1.5, '4v4': 1.8, '5v5': 2.2, '6v6': 2.5
+  }
+
+  // Reset participant selection when clans or mode changes
+  const handleWinnerChange = (newWinnerId: string) => {
+    setWinnerClanId(newWinnerId)
+    setSelectedWinnerPlayers([])
+  }
+
+  const handleLoserChange = (newLoserId: string) => {
+    setLoserClanId(newLoserId)
+    setSelectedLoserPlayers([])
+  }
+
+  const handleModeChange = (newMode: MatchMode) => {
+    setMatchMode(newMode)
+    setSelectedWinnerPlayers([])
+    setSelectedLoserPlayers([])
+  }
+
+  const toggleWinnerPlayer = (playerId: string) => {
+    setSelectedWinnerPlayers(prev => {
+      if (prev.includes(playerId)) {
+        return prev.filter(id => id !== playerId)
+      }
+      if (prev.length >= playersRequired) {
+        return prev
+      }
+      return [...prev, playerId]
+    })
+  }
+
+  const toggleLoserPlayer = (playerId: string) => {
+    setSelectedLoserPlayers(prev => {
+      if (prev.includes(playerId)) {
+        return prev.filter(id => id !== playerId)
+      }
+      if (prev.length >= playersRequired) {
+        return prev
+      }
+      return [...prev, playerId]
+    })
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (submitting) return
+
+    if (!winnerClanId || !loserClanId) {
+      setError('Please select both winner and loser clans')
+      return
+    }
+
+    if (winnerClanId === loserClanId) {
+      setError('Winner and loser must be different clans')
+      return
+    }
+
+    // Validate participant count
+    if (selectedWinnerPlayers.length !== playersRequired) {
+      setError(`Please select exactly ${playersRequired} players from the winning team`)
+      return
+    }
+    if (selectedLoserPlayers.length !== playersRequired) {
+      setError(`Please select exactly ${playersRequired} players from the losing team`)
+      return
+    }
+
+    const result = await reportMatchAsAdmin(
+      winnerClanId,
+      loserClanId,
+      matchMode,
+      selectedWinnerPlayers,
+      selectedLoserPlayers,
+      notes || undefined
+    )
+
+    if (result.error) {
+      setError(result.error.message)
+    } else {
+      setSuccess(true)
+      setPointsAwarded(result.pointsAwarded || 0)
+      setTimeout(() => {
+        onClose()
+        onSuccess()
+        // Reset form
+        setSuccess(false)
+        setWinnerClanId('')
+        setLoserClanId('')
+        setMatchMode('1v1')
+        setNotes('')
+        setSelectedWinnerPlayers([])
+        setSelectedLoserPlayers([])
+        // Dispatch custom event to notify all components to refresh
+        window.dispatchEvent(new CustomEvent('match-reported'))
+      }, 2500)
+    }
+  }
+
+  const selectedWinnerClan = clans.find((c: any) => c.id === winnerClanId)
+  const selectedLoserClan = clans.find((c: any) => c.id === loserClanId)
+  const calculatedPoints = Math.round(100 * FORMAT_MULTIPLIERS[matchMode])
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Report Match (Admin)" size="xl">
+      {success ? (
+        <div className="text-center py-6">
+          <div className="inline-flex p-4 bg-accent-success/20 rounded-full mb-4">
+            <Trophy className="w-12 h-12 text-accent-success" />
+          </div>
+          <h3 className="text-xl font-bold mb-2">Match Reported!</h3>
+          <p className="text-gray-400">
+            Rankings and warrior stats have been updated.
+            <span className="block mt-2 text-accent-primary">
+              Winner awarded +{pointsAwarded} PP
+            </span>
+          </p>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <Alert
+            type="info"
+            message="As an admin, you can report any match between any two clans."
+          />
+
+          {error && <Alert type="error" message={error} />}
+
+          {/* Match Mode Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Match Mode *
+            </label>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {MATCH_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => handleModeChange(mode)}
+                  className={`py-2 px-2 sm:px-3 rounded-lg font-medium text-xs sm:text-sm transition-all ${
+                    matchMode === mode
+                      ? 'bg-accent-primary text-white'
+                      : 'bg-dark-700 text-gray-400 hover:bg-dark-600'
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Multiplier: {FORMAT_MULTIPLIERS[matchMode]}x = <span className="text-accent-primary font-semibold">{calculatedPoints} PP</span> for winner
+            </p>
+          </div>
+
+          {/* Clan Selection */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Winner Clan Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Winning Clan *
+              </label>
+              <select
+                value={winnerClanId}
+                onChange={(e) => handleWinnerChange(e.target.value)}
+                className="input-field"
+                required
+              >
+                <option value="">Select winner...</option>
+                {clans.filter((c: any) => c.id !== loserClanId).map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    [{c.tag}] {c.name} ({c.points} pts)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Loser Clan Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Losing Clan *
+              </label>
+              <select
+                value={loserClanId}
+                onChange={(e) => handleLoserChange(e.target.value)}
+                className="input-field"
+                required
+              >
+                <option value="">Select loser...</option>
+                {clans.filter((c: any) => c.id !== winnerClanId).map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    [{c.tag}] {c.name} ({c.points} pts)
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Participant Selection - Only show when both clans are selected */}
+          {winnerClanId && loserClanId && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Winner Team Roster */}
+              <div className="bg-dark-700/50 rounded-lg p-3 sm:p-4">
+                <h4 className="font-semibold text-accent-success mb-3 flex items-center justify-between text-sm sm:text-base">
+                  <span className="flex items-center gap-2">
+                    <Trophy className="w-4 h-4" />
+                    Winner [{selectedWinnerClan?.tag}]
+                  </span>
+                  <span className="text-xs bg-dark-600 px-2 py-1 rounded">
+                    {selectedWinnerPlayers.length}/{playersRequired}
+                  </span>
+                </h4>
+                {winnerLoading ? (
+                  <p className="text-gray-400 text-sm">Loading players...</p>
+                ) : winnerMembers.length === 0 ? (
+                  <p className="text-gray-400 text-sm">No players found</p>
+                ) : (
+                  <div className="space-y-2 max-h-48 sm:max-h-40 overflow-y-auto">
+                    {winnerMembers.map((member) => (
+                      <label
+                        key={member.id}
+                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
+                          selectedWinnerPlayers.includes(member.id)
+                            ? 'bg-accent-success/20 border border-accent-success/50'
+                            : 'bg-dark-600 hover:bg-dark-500'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedWinnerPlayers.includes(member.id)}
+                          onChange={() => toggleWinnerPlayer(member.id)}
+                          className="sr-only"
+                        />
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                          selectedWinnerPlayers.includes(member.id)
+                            ? 'bg-accent-success border-accent-success'
+                            : 'border-gray-500'
+                        }`}>
+                          {selectedWinnerPlayers.includes(member.id) && (
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="text-sm">{member.nickname}</span>
+                        {member.clanRole === 'captain' && (
+                          <Crown className="w-3 h-3 text-yellow-400" />
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Loser Team Roster */}
+              <div className="bg-dark-700/50 rounded-lg p-3 sm:p-4">
+                <h4 className="font-semibold text-accent-danger mb-3 flex items-center justify-between text-sm sm:text-base">
+                  <span className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Loser [{selectedLoserClan?.tag}]
+                  </span>
+                  <span className="text-xs bg-dark-600 px-2 py-1 rounded">
+                    {selectedLoserPlayers.length}/{playersRequired}
+                  </span>
+                </h4>
+                {loserLoading ? (
+                  <p className="text-gray-400 text-sm">Loading players...</p>
+                ) : loserMembers.length === 0 ? (
+                  <p className="text-gray-400 text-sm">No players found</p>
+                ) : (
+                  <div className="space-y-2 max-h-48 sm:max-h-40 overflow-y-auto">
+                    {loserMembers.map((member) => (
+                      <label
+                        key={member.id}
+                        className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
+                          selectedLoserPlayers.includes(member.id)
+                            ? 'bg-accent-danger/20 border border-accent-danger/50'
+                            : 'bg-dark-600 hover:bg-dark-500'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedLoserPlayers.includes(member.id)}
+                          onChange={() => toggleLoserPlayer(member.id)}
+                          className="sr-only"
+                        />
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                          selectedLoserPlayers.includes(member.id)
+                            ? 'bg-accent-danger border-accent-danger'
+                            : 'border-gray-500'
+                        }`}>
+                          {selectedLoserPlayers.includes(member.id) && (
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
+                        <span className="text-sm">{member.nickname}</span>
+                        {member.clanRole === 'captain' && (
+                          <Crown className="w-3 h-3 text-yellow-400" />
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Notes (optional)
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="input-field resize-none"
+              rows={2}
+              placeholder="Any additional details..."
+            />
+          </div>
+
+          {/* Points Info */}
+          <div className="bg-dark-700/50 rounded-lg p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-gray-400">
+              <strong className="text-white">Power Points (PP) System:</strong>
+              <br />
+              Base: 100 PP × Format Multiplier
+              <br />
+              <span className="text-accent-primary mt-2 block">
+                <strong>{matchMode}:</strong> 100 × {FORMAT_MULTIPLIERS[matchMode]} = <span className="font-bold">{calculatedPoints} PP</span>
+              </span>
+            </p>
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row gap-3 justify-end">
+            <button type="button" onClick={onClose} className="btn-secondary w-full sm:w-auto">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !winnerClanId || !loserClanId || selectedWinnerPlayers.length !== playersRequired || selectedLoserPlayers.length !== playersRequired}
+              className="btn-primary w-full sm:w-auto"
+            >
+              {submitting ? 'Reporting...' : 'Report Match'}
+            </button>
+          </div>
+        </form>
+      )}
+    </Modal>
   )
 }

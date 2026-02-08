@@ -439,7 +439,84 @@ export function useReportMatch() {
     }
   }
 
-  return { reportLoss, submitting }
+  // Admin function to report match with full control over both clans
+  const reportMatchAsAdmin = async (
+    winnerClanId: string,
+    loserClanId: string,
+    matchMode: MatchMode = '5v5',
+    winnerParticipants: string[] = [],
+    loserParticipants: string[] = [],
+    notes?: string
+  ) => {
+    if (!user || !isSupabaseConfigured()) {
+      return { error: new Error('Not authenticated') }
+    }
+
+    // Can't report against same clan
+    if (winnerClanId === loserClanId) {
+      return { error: new Error('Winner and loser clans must be different') }
+    }
+
+    // Verify both clans exist
+    const { data: clans, error: clansError } = await supabase
+      .from('clans')
+      .select('id, name')
+      .in('id', [winnerClanId, loserClanId])
+
+    if (clansError || !clans || clans.length !== 2) {
+      return { error: new Error('One or both clans not found') }
+    }
+
+    setSubmitting(true)
+
+    try {
+      console.log('=== ADMIN REPORTING MATCH ===')
+      console.log('Winner clan:', winnerClanId)
+      console.log('Loser clan:', loserClanId)
+      console.log('Winner participants:', winnerParticipants)
+      console.log('Loser participants:', loserParticipants)
+
+      // Call the database function to report the match
+      const { data: matchResult, error: rpcError } = await (supabase.rpc as any)('report_match', {
+        p_winner_clan_id: winnerClanId,
+        p_loser_clan_id: loserClanId,
+        p_reported_by: user.id,
+        p_winner_score: 1,
+        p_loser_score: 0,
+        p_match_mode: matchMode,
+        p_notes: notes || null,
+        p_winner_player_ids: winnerParticipants,
+        p_loser_player_ids: loserParticipants
+      })
+
+      if (rpcError) {
+        console.error('Error reporting match:', rpcError)
+        setSubmitting(false)
+        return { error: rpcError }
+      }
+
+      console.log('Match reported successfully:', matchResult)
+
+      const result = matchResult as any
+
+      setSubmitting(false)
+      return {
+        error: null,
+        data: result,
+        pointsAwarded: result?.points_awarded || 0,
+        loserPenalty: 0,
+        bonusSkill: result?.power_points_bonus || 0,
+        winnerRank: 0,
+        loserCalculatedRank: 0
+      }
+    } catch (err) {
+      console.error('Unexpected error reporting match:', err)
+      setSubmitting(false)
+      return { error: err as Error }
+    }
+  }
+
+  return { reportLoss, reportMatchAsAdmin, submitting }
 }
 
 export function useRankings(seasonId?: string | null) {

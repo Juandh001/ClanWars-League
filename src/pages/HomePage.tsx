@@ -405,9 +405,8 @@ function ClanRankRow({
           </div>
           <div className="min-w-0">
             <p className="font-semibold text-white group-hover:text-accent-primary transition-colors text-sm truncate">
-              {clan.name}
+              [{clan.tag}]
             </p>
-            <p className="text-xs text-gray-500">[{clan.tag}]</p>
           </div>
         </Link>
       </td>
