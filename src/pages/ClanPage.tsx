@@ -38,7 +38,7 @@ export function ClanPage() {
   const { matches, refetch: refetchMatches } = useMatches(id)
   const { badges } = useBadges(id, 'clan')
   const { user, clan: userClan } = useAuth()
-  const { inviteMemberByNickname, kickMember } = useClanActions()
+  const { inviteMemberByNickname, kickMember, leaveClan } = useClanActions()
   const { results: searchResults, loading: searchLoading, searchUsers, clearResults } = useUserSearch()
 
   // Listen for match-reported event to refresh clan data
@@ -118,6 +118,20 @@ export function ClanPage() {
     }
   }
 
+  const handleLeaveClan = async () => {
+    if (!clan || !user) return
+
+    if (!confirm('Are you sure you want to leave this clan?')) return
+
+    const { error } = await leaveClan(clan.id)
+    if (error) {
+      alert(error.message)
+    } else {
+      // Redirect to home after leaving
+      window.location.href = '/'
+    }
+  }
+
   if (loading) {
     return <LoadingScreen message="Loading clan..." />
   }
@@ -177,8 +191,9 @@ export function ClanPage() {
               </div>
 
               {/* Actions */}
-              {isCaptain && (
+              {isMember && (
                 <div className="flex gap-3">
+                  {/* Any member can invite */}
                   <button
                     onClick={() => setShowInviteModal(true)}
                     className="btn-primary flex items-center gap-2"
@@ -187,17 +202,29 @@ export function ClanPage() {
                     <UserPlus className="w-4 h-4" />
                     Invite
                   </button>
-                </div>
-              )}
 
-              {isMember && userClan && (
-                <button
-                  onClick={() => setShowReportModal(true)}
-                  className="btn-secondary flex items-center gap-2"
-                >
-                  <Flag className="w-4 h-4" />
-                  Report Match
-                </button>
+                  {/* Only members (not captain) can leave */}
+                  {!isCaptain && (
+                    <button
+                      onClick={handleLeaveClan}
+                      className="btn-danger flex items-center gap-2"
+                    >
+                      <UserMinus className="w-4 h-4" />
+                      Leave Clan
+                    </button>
+                  )}
+
+                  {/* Any member can report matches */}
+                  {userClan && (
+                    <button
+                      onClick={() => setShowReportModal(true)}
+                      className="btn-secondary flex items-center gap-2"
+                    >
+                      <Flag className="w-4 h-4" />
+                      Report Match
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 

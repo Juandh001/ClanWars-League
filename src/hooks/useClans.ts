@@ -202,15 +202,16 @@ export function useClanActions() {
       return { error: new Error('Not authenticated') }
     }
 
-    // Check if user is captain
-    const { data: clanData } = await supabase
-      .from('clans')
-      .select('captain_id')
-      .eq('id', clanId)
+    // Check if user is a member of the clan (any member can invite, not just captain)
+    const { data: memberData } = await supabase
+      .from('clan_members')
+      .select('clan_id')
+      .eq('clan_id', clanId)
+      .eq('user_id', user.id)
       .single()
 
-    if (clanData?.captain_id !== user.id) {
-      return { error: new Error('Only the captain can invite members') }
+    if (!memberData) {
+      return { error: new Error('You must be a member of this clan to invite others') }
     }
 
     // Find user by nickname
@@ -282,15 +283,16 @@ export function useClanActions() {
       return { error: new Error('Not authenticated') }
     }
 
-    // Check if user is captain
-    const { data: clanData } = await supabase
-      .from('clans')
-      .select('captain_id')
-      .eq('id', clanId)
+    // Check if user is a member of the clan
+    const { data: memberData } = await supabase
+      .from('clan_members')
+      .select('clan_id')
+      .eq('clan_id', clanId)
+      .eq('user_id', user.id)
       .single()
 
-    if (clanData?.captain_id !== user.id) {
-      return { error: new Error('Only the captain can invite members') }
+    if (!memberData) {
+      return { error: new Error('You must be a member of this clan to invite others') }
     }
 
     // Find user by email
