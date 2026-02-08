@@ -80,30 +80,34 @@ async function checkAndRotateSeason(): Promise<Season | null> {
       return null
     }
 
+    // DISABLED: Auto-rotation based on client date caused premature closures
+    // Problem: Client timezone/date can differ from server, causing incorrect rotations
+    // Solution: Admins must manually close seasons via AdminPage
+
     // Check if current season has expired
-    const now = new Date()
-    const endDate = new Date(activeSeason.end_date)
+    // const now = new Date()
+    // const endDate = new Date(activeSeason.end_date)
 
-    if (now > endDate) {
-      // Season expired, create a new one
-      const nextNumber = activeSeason.number + 1
+    // if (now > endDate) {
+    //   // Season expired, create a new one
+    //   const nextNumber = activeSeason.number + 1
 
-      const { data: newSeasonId, error } = await supabase.rpc('start_new_season', {
-        season_name: `Season ${nextNumber}`,
-        season_number: nextNumber,
-        duration_days: 30
-      })
+    //   const { data: newSeasonId, error } = await supabase.rpc('start_new_season', {
+    //     season_name: `Season ${nextNumber}`,
+    //     season_number: nextNumber,
+    //     duration_days: 30
+    //   })
 
-      if (!error && newSeasonId) {
-        // Fetch the newly created season
-        const { data } = await supabase
-          .from('seasons')
-          .select('*')
-          .eq('id', newSeasonId)
-          .single()
-        return data
-      }
-    }
+    //   if (!error && newSeasonId) {
+    //     // Fetch the newly created season
+    //     const { data } = await supabase
+    //       .from('seasons')
+    //       .select('*')
+    //       .eq('id', newSeasonId)
+    //       .single()
+    //     return data
+    //   }
+    // }
 
     return activeSeason
   } finally {
@@ -158,8 +162,9 @@ export function useCurrentSeason() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   useEffect(() => {
-    // Check rotation on initial load
-    fetchCurrentSeason(true)
+    // DISABLED: Auto-rotation caused premature season closures due to client timezone/date issues
+    // Seasons should only be closed manually by admins
+    fetchCurrentSeason(false)
 
     // Create unique channel name to avoid conflicts
     const channelName = `seasons_changes_${Date.now()}_${Math.random().toString(36).slice(2)}`
