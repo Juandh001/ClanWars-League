@@ -40,6 +40,7 @@ export function AdminPage() {
   const {
     deleteUser,
     deleteClan,
+    getClanDeletionInfo,
     removePlayerFromClan,
     adjustClanPoints,
     adjustWarriorPoints,
@@ -70,6 +71,10 @@ export function AdminPage() {
   const [editSeasonName, setEditSeasonName] = useState('')
   const [editSeasonStartDate, setEditSeasonStartDate] = useState('')
   const [editSeasonEndDate, setEditSeasonEndDate] = useState('')
+
+  // Clan deletion info
+  const [clanDeletionInfo, setClanDeletionInfo] = useState<any>(null)
+  const [loadingDeletionInfo, setLoadingDeletionInfo] = useState(false)
 
   const currentSeason = seasons.find(s => s.is_active)
 
@@ -194,10 +199,19 @@ export function AdminPage() {
     setShowPointsModal(true)
   }
 
-  const openDeleteClanModal = (clan: any) => {
+  const openDeleteClanModal = async (clan: any) => {
     setSelectedClan(clan)
     setSelectedUser(null)
+    setLoadingDeletionInfo(true)
     setShowDeleteModal(true)
+
+    // Get deletion impact info
+    const { data, error: infoError } = await getClanDeletionInfo(clan.id)
+    setLoadingDeletionInfo(false)
+
+    if (!infoError && data) {
+      setClanDeletionInfo(data)
+    }
   }
 
   const openDeleteUserModal = (user: any) => {
@@ -804,6 +818,7 @@ export function AdminPage() {
           setShowDeleteModal(false)
           setSelectedClan(null)
           setSelectedUser(null)
+          setClanDeletionInfo(null)
           setError('')
         }}
         title="Confirm Deletion"
@@ -813,7 +828,7 @@ export function AdminPage() {
 
           <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
             <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0" />
-            <div>
+            <div className="w-full">
               <p className="text-red-400 font-semibold">Warning: This action cannot be undone!</p>
               <p className="text-sm text-red-400/70 mt-1">
                 {selectedClan
@@ -823,16 +838,71 @@ export function AdminPage() {
             </div>
           </div>
 
+          {/* Clan deletion impact details */}
+          {selectedClan && loadingDeletionInfo && (
+            <div className="bg-dark-700/50 rounded-lg p-4 text-center">
+              <RefreshCw className="w-6 h-6 mx-auto mb-2 text-gray-400 animate-spin" />
+              <p className="text-sm text-gray-400">Calculating impact...</p>
+            </div>
+          )}
+
+          {selectedClan && !loadingDeletionInfo && clanDeletionInfo && (
+            <div className="bg-dark-700/50 rounded-lg p-4 space-y-3">
+              <h4 className="font-semibold text-white flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                Deletion Impact
+              </h4>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-dark-600 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-red-400">{clanDeletionInfo.matchesCount}</p>
+                  <p className="text-xs text-gray-400 mt-1">Matches to delete</p>
+                </div>
+                <div className="bg-dark-600 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-yellow-400">{clanDeletionInfo.affectedClansCount}</p>
+                  <p className="text-xs text-gray-400 mt-1">Clans affected</p>
+                </div>
+                <div className="bg-dark-600 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-blue-400">{clanDeletionInfo.affectedWarriorsCount}</p>
+                  <p className="text-xs text-gray-400 mt-1">Warriors affected</p>
+                </div>
+              </div>
+
+              {clanDeletionInfo.affectedWarriorNames && clanDeletionInfo.affectedWarriorNames.length > 0 && (
+                <div className="bg-dark-600 rounded-lg p-3">
+                  <p className="text-xs text-gray-400 mb-2">Affected warriors (first 10):</p>
+                  <div className="flex flex-wrap gap-1">
+                    {clanDeletionInfo.affectedWarriorNames.map((name: string, i: number) => (
+                      <span key={i} className="text-xs bg-dark-700 px-2 py-1 rounded text-gray-300">
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                <p className="text-sm text-blue-400 flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4" />
+                  Points will be automatically recalculated for all affected clans and warriors
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-3 justify-end">
             <button
-              onClick={() => setShowDeleteModal(false)}
+              onClick={() => {
+                setShowDeleteModal(false)
+                setClanDeletionInfo(null)
+              }}
               className="btn-secondary"
             >
               Cancel
             </button>
             <button
               onClick={selectedClan ? handleDeleteClan : handleDeleteUser}
-              disabled={actionLoading}
+              disabled={actionLoading || loadingDeletionInfo}
               className="btn-danger"
             >
               {actionLoading ? 'Deleting...' : 'Delete Permanently'}
