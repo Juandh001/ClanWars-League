@@ -173,18 +173,27 @@ export function useClanActions() {
     return { error: null, data: clanData }
   }
 
-  const updateClan = async (clanId: string, updates: { name?: string; description?: string; logo_url?: string }) => {
+  const updateClan = async (clanId: string, updates: { name?: string; tag?: string; description?: string; logo_url?: string }) => {
     if (!user || !isSupabaseConfigured()) {
       return { error: new Error('Not authenticated') }
     }
 
-    const { error } = await supabase
+    console.log('updateClan called with:', { clanId, updates, userId: user.id })
+
+    const { data, error } = await supabase
       .from('clans')
       .update(updates)
       .eq('id', clanId)
       .eq('captain_id', user.id) // Ensure user is captain
+      .select()
 
-    return { error }
+    if (error) {
+      console.error('Clan update error:', error)
+    } else {
+      console.log('Clan update successful:', data)
+    }
+
+    return { error, data }
   }
 
   // New: Invite by nickname (searches user and creates invitation)

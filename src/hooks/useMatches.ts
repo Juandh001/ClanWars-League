@@ -570,13 +570,23 @@ export function useRankings(seasonId?: string | null) {
       const { data, error: fetchError } = await supabase
         .from('clans')
         .select('*')
-        .order('points', { ascending: false })
-        .order('matches_won', { ascending: false })
 
       if (fetchError) {
         setError(fetchError.message)
       } else {
-        setRankings((data || []) as Clan[])
+        // Sort: prioritize clans with matches played, then by points, then by wins
+        const sorted = (data || []).sort((a, b) => {
+          // First, prioritize clans that have played matches
+          if (a.matches_played > 0 && b.matches_played === 0) return -1
+          if (a.matches_played === 0 && b.matches_played > 0) return 1
+
+          // Then sort by points (descending)
+          if (b.points !== a.points) return b.points - a.points
+
+          // Then by matches won (descending)
+          return b.matches_won - a.matches_won
+        })
+        setRankings(sorted as Clan[])
       }
     }
 

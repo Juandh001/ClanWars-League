@@ -111,11 +111,21 @@ export function useWarriorRankings(seasonId?: string | null) {
         }
       })
 
-      // Sort by warrior_points descending, then by nickname for ties
+      // Sort: prioritize warriors with matches played, then by points, then by nickname
       rankings.sort((a, b) => {
+        const aGames = (a.warrior_wins || 0) + (a.warrior_losses || 0)
+        const bGames = (b.warrior_wins || 0) + (b.warrior_losses || 0)
+
+        // First, prioritize warriors that have played matches
+        if (aGames > 0 && bGames === 0) return -1
+        if (aGames === 0 && bGames > 0) return 1
+
+        // Then sort by warrior_points descending
         if (b.warrior_points !== a.warrior_points) {
           return (b.warrior_points || 0) - (a.warrior_points || 0)
         }
+
+        // Finally, sort alphabetically for ties
         return a.nickname.localeCompare(b.nickname)
       })
 
