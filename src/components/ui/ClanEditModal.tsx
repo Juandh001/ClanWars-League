@@ -107,11 +107,12 @@ export function ClanEditModal({ isOpen, onClose, onSuccess, clan }: ClanEditModa
 
       console.log('Upload successful:', uploadData)
 
-      // Get public URL
+      // Get public URL with cache-busting timestamp
       const { data: urlData } = supabase.storage.from('clan-logos').getPublicUrl(fileName)
-      console.log('Public URL:', urlData.publicUrl)
+      const urlWithCacheBust = `${urlData.publicUrl}?t=${Date.now()}`
+      console.log('Public URL with cache bust:', urlWithCacheBust)
 
-      return urlData.publicUrl
+      return urlWithCacheBust
     } catch (error) {
       console.error('Error in uploadLogo:', error)
       throw error
