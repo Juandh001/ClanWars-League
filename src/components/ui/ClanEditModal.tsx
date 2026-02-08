@@ -65,32 +65,57 @@ export function ClanEditModal({ isOpen, onClose, onSuccess, clan }: ClanEditModa
   const uploadLogo = async (): Promise<string | null> => {
     if (!logoFile) return null
 
-    const fileExt = logoFile.name.split('.').pop()
-    const fileName = `${clan.id}/logo.${fileExt}`
+    try {
+      const fileExt = logoFile.name.split('.').pop()
+      const fileName = `${clan.id}/logo.${fileExt}`
 
-    // Delete old logo if exists
-    if (clan.logo_url && clan.logo_url.includes('clan-logos')) {
-      try {
-        const oldPath = clan.logo_url.split('/clan-logos/')[1]
-        if (oldPath) {
-          await supabase.storage.from('clan-logos').remove([oldPath])
+      console.log('Uploading logo:', {
+        fileName,
+        fileType: logoFile.type,
+        fileSize: logoFile.size,
+        clanId: clan.id
+      })
+
+      // Delete old logo if exists
+      if (clan.logo_url && clan.logo_url.includes('clan-logos')) {
+        try {
+          const oldPath = clan.logo_url.split('/clan-logos/')[1]
+          if (oldPath) {
+            console.log('Deleting old logo:', oldPath)
+            const { error: deleteError } = await supabase.storage.from('clan-logos').remove([oldPath])
+            if (deleteError) {
+              console.warn('Could not delete old logo:', deleteError)
+            }
+          }
+        } catch (e) {
+          console.warn('Error deleting old logo:', e)
         }
-      } catch (e) {
-        console.warn('Could not delete old logo:', e)
       }
+
+      // Upload new logo
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('clan-logos')
+        .upload(fileName, logoFile, {
+          upsert: true,
+          contentType: logoFile.type
+        })
+
+      if (uploadError) {
+        console.error('Logo upload error:', uploadError)
+        throw new Error(`Failed to upload logo: ${uploadError.message}`)
+      }
+
+      console.log('Upload successful:', uploadData)
+
+      // Get public URL
+      const { data: urlData } = supabase.storage.from('clan-logos').getPublicUrl(fileName)
+      console.log('Public URL:', urlData.publicUrl)
+
+      return urlData.publicUrl
+    } catch (error) {
+      console.error('Error in uploadLogo:', error)
+      throw error
     }
-
-    const { error } = await supabase.storage
-      .from('clan-logos')
-      .upload(fileName, logoFile, { upsert: true })
-
-    if (error) {
-      console.error('Logo upload error:', error)
-      throw new Error(`Failed to upload logo: ${error.message}`)
-    }
-
-    const { data } = supabase.storage.from('clan-logos').getPublicUrl(fileName)
-    return data.publicUrl
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -142,17 +167,33 @@ export function ClanEditModal({ isOpen, onClose, onSuccess, clan }: ClanEditModa
         updates.description = description || null
       }
 
+      // Upload logo first if there's a new file
       if (logoFile) {
-        const logoUrl = await uploadLogo()
-        if (logoUrl) {
-          updates.logo_url = logoUrl
+        try {
+          console.log('Starting logo upload...')
+          const logoUrl = await uploadLogo()
+          if (logoUrl) {
+            console.log('Logo uploaded successfully, URL:', logoUrl)
+            updates.logo_url = logoUrl
+          } else {
+            throw new Error('Logo upload returned null URL')
+          }
+        } catch (uploadError) {
+          console.error('Logo upload failed:', uploadError)
+          const errorMsg = uploadError instanceof Error ? uploadError.message : 'Failed to upload logo'
+          setError(`Logo upload failed: ${errorMsg}`)
+          setLoading(false)
+          return
         }
       }
 
+      // Update clan in database
       if (Object.keys(updates).length > 0) {
-        const { error } = await updateClan(clan.id, updates)
-        if (error) {
-          setError(error.message)
+        console.log('Updating clan with:', updates)
+        const { error: updateError } = await updateClan(clan.id, updates)
+        if (updateError) {
+          console.error('Clan update failed:', updateError)
+          setError(`Update failed: ${updateError.message}`)
           setLoading(false)
           return
         }
@@ -165,6 +206,7 @@ export function ClanEditModal({ isOpen, onClose, onSuccess, clan }: ClanEditModa
         onClose()
       }, 1000)
     } catch (err) {
+      console.error('Unexpected error in handleSubmit:', err)
       setError(err instanceof Error ? err.message : 'Failed to update clan')
     } finally {
       setLoading(false)
