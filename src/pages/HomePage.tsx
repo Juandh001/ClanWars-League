@@ -32,6 +32,7 @@ export function HomePage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [showAllClans, setShowAllClans] = useState(false)
   const [showAllWarriors, setShowAllWarriors] = useState(false)
+  const [showAllMatches, setShowAllMatches] = useState(false)
 
   // Initialize selectedSeasonId with current season when it loads
   useEffect(() => {
@@ -48,6 +49,7 @@ export function HomePage() {
   useEffect(() => {
     setShowAllClans(false)
     setShowAllWarriors(false)
+    setShowAllMatches(false)
   }, [selectedSeasonId])
 
   // Determine if we should filter by season
@@ -124,6 +126,10 @@ export function HomePage() {
   const displayedWarriors = useMemo(() => {
     return showAllWarriors ? filteredWarriors : filteredWarriors.slice(0, 10)
   }, [filteredWarriors, showAllWarriors])
+
+  const displayedMatches = useMemo(() => {
+    return showAllMatches ? matches : matches.slice(0, 10)
+  }, [matches, showAllMatches])
 
   const getRankBadge = (rank: number) => {
     if (rank === 1) return <Crown className="w-5 h-5 text-yellow-400" />
@@ -411,7 +417,7 @@ export function HomePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-700">
-                {matches.slice(0, 20).map((match) => (
+                {displayedMatches.map((match) => (
                   <MatchHistoryRow
                     key={match.id}
                     match={match}
@@ -420,6 +426,28 @@ export function HomePage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* View All Button */}
+        {!matchesLoading && matches.length > 10 && (
+          <div className="p-4 border-t border-dark-600">
+            <button
+              onClick={() => setShowAllMatches(!showAllMatches)}
+              className="w-full py-2 px-4 bg-dark-700 hover:bg-dark-600 text-accent-primary font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              {showAllMatches ? (
+                <>
+                  <History className="w-4 h-4" />
+                  Show Recent 10
+                </>
+              ) : (
+                <>
+                  <History className="w-4 h-4" />
+                  View All {matches.length} Matches
+                </>
+              )}
+            </button>
           </div>
         )}
       </div>
