@@ -333,7 +333,7 @@ export function useAdmin() {
         .eq('id', clanId)
         .single()
 
-      // Get all matches to identify affected clans and warriors
+      // Get all matches to identify affected clans and warriors BEFORE deletion
       const { data: matchesData } = await supabase
         .from('matches')
         .select('id, winner_clan_id, loser_clan_id')
@@ -346,7 +346,7 @@ export function useAdmin() {
         if (match.loser_clan_id !== clanId) affectedClanIds.add(match.loser_clan_id)
       })
 
-      // Get affected warriors
+      // Get affected warriors BEFORE deletion
       const matchIds = matchesData?.map((m: any) => m.id) || []
       const { data: participantsData } = await supabase
         .from('match_participants')
@@ -356,19 +356,8 @@ export function useAdmin() {
       const affectedWarriorIds = new Set<string>()
       participantsData?.forEach((p: any) => affectedWarriorIds.add(p.user_id))
 
-      // Delete clan members
-      await supabase.from('clan_members').delete().eq('clan_id', clanId)
-
-      // Delete clan invitations
-      await supabase.from('clan_invitations').delete().eq('clan_id', clanId)
-
-      // Delete matches involving this clan (cascades to match_participants)
-      await supabase
-        .from('matches')
-        .delete()
-        .or(`winner_clan_id.eq.${clanId},loser_clan_id.eq.${clanId}`)
-
-      // Delete clan
+      // Delete clan (CASCADE will automatically delete matches and match_participants)
+      // No need to manually delete matches anymore - the CASCADE constraint handles it
       const { error: deleteError } = await supabase.from('clans').delete().eq('id', clanId)
 
       if (deleteError) {
