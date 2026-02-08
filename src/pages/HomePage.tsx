@@ -12,7 +12,9 @@ import {
   Search,
   History,
   CheckCircle,
-  XCircle
+  XCircle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
 import { useRankings, useMatches } from '../hooks/useMatches'
 import { useWarriorRankings } from '../hooks/useWarriorRankings'
@@ -28,6 +30,8 @@ export function HomePage() {
   const { season: currentSeason, loading: currentSeasonLoading } = useCurrentSeason()
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [showAllClans, setShowAllClans] = useState(false)
+  const [showAllWarriors, setShowAllWarriors] = useState(false)
 
   // Initialize selectedSeasonId with current season when it loads
   useEffect(() => {
@@ -35,6 +39,16 @@ export function HomePage() {
       setSelectedSeasonId(currentSeason.id)
     }
   }, [currentSeason, selectedSeasonId])
+
+  // Reset "show all" states when search term or season changes
+  useEffect(() => {
+    setShowAllWarriors(false)
+  }, [searchTerm])
+
+  useEffect(() => {
+    setShowAllClans(false)
+    setShowAllWarriors(false)
+  }, [selectedSeasonId])
 
   // Determine if we should filter by season
   // Only pass seasonId if a past (non-active) season is selected
@@ -101,6 +115,15 @@ export function HomePage() {
     totalWarriors: warriors.length,
     totalMatches: matches.length
   }), [rankings, warriors, matches])
+
+  // Limit display to 10 items unless "View All" is clicked
+  const displayedClans = useMemo(() => {
+    return showAllClans ? rankings : rankings.slice(0, 10)
+  }, [rankings, showAllClans])
+
+  const displayedWarriors = useMemo(() => {
+    return showAllWarriors ? filteredWarriors : filteredWarriors.slice(0, 10)
+  }, [filteredWarriors, showAllWarriors])
 
   const getRankBadge = (rank: number) => {
     if (rank === 1) return <Crown className="w-5 h-5 text-yellow-400" />
@@ -234,7 +257,7 @@ export function HomePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-700">
-                  {rankings.map((clan, index) => (
+                  {displayedClans.map((clan, index) => (
                     <ClanRankRow
                       key={clan.id}
                       clan={clan}
@@ -245,6 +268,28 @@ export function HomePage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* View All Button */}
+          {!clansLoading && rankings.length > 10 && (
+            <div className="p-4 border-t border-dark-600">
+              <button
+                onClick={() => setShowAllClans(!showAllClans)}
+                className="w-full py-2 px-4 bg-dark-700 hover:bg-dark-600 text-accent-primary font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {showAllClans ? (
+                  <>
+                    <Trophy className="w-4 h-4" />
+                    Show Top 10
+                  </>
+                ) : (
+                  <>
+                    <Trophy className="w-4 h-4" />
+                    View All {rankings.length} Clans
+                  </>
+                )}
+              </button>
             </div>
           )}
         </div>
@@ -289,7 +334,7 @@ export function HomePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-700">
-                  {filteredWarriors.map((warrior, index) => (
+                  {displayedWarriors.map((warrior, index) => (
                     <WarriorRankRow
                       key={warrior.id}
                       warrior={warrior}
@@ -300,6 +345,28 @@ export function HomePage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* View All Button */}
+          {!warriorsLoading && filteredWarriors.length > 10 && (
+            <div className="p-4 border-t border-dark-600">
+              <button
+                onClick={() => setShowAllWarriors(!showAllWarriors)}
+                className="w-full py-2 px-4 bg-dark-700 hover:bg-dark-600 text-accent-primary font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {showAllWarriors ? (
+                  <>
+                    <Swords className="w-4 h-4" />
+                    Show Top 10
+                  </>
+                ) : (
+                  <>
+                    <Swords className="w-4 h-4" />
+                    View All {filteredWarriors.length} Warriors
+                  </>
+                )}
+              </button>
             </div>
           )}
         </div>
@@ -338,6 +405,9 @@ export function HomePage() {
                   <th className="table-header text-center">Loser</th>
                   <th className="table-header text-center">Mode</th>
                   <th className="table-header text-center hidden md:table-cell">Date</th>
+                  <th className="table-header text-center w-12">
+                    <Users className="w-4 h-4 mx-auto" />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-700">
@@ -511,73 +581,183 @@ function MatchHistoryRow({
   match: any
   clanRankMap: Map<string, number>
 }) {
+  const [isExpanded, setIsExpanded] = useState(false)
   const winnerRank = clanRankMap.get(match.winner_clan?.id) || '-'
   const loserRank = clanRankMap.get(match.loser_clan?.id) || '-'
 
+  // Get participants for each team
+  const winnerParticipants = (match.match_participants || []).filter((p: any) => p.team === 'winner')
+  const loserParticipants = (match.match_participants || []).filter((p: any) => p.team === 'loser')
+
   return (
-    <tr className="hover:bg-dark-700/50 transition-colors">
-      {/* Winner */}
-      <td className="table-cell">
-        <div className="flex items-center justify-center gap-2">
-          <CheckCircle className="w-4 h-4 text-accent-success flex-shrink-0" />
-          <Link
-            to={`/clan/${match.winner_clan?.id}`}
-            className="flex items-center gap-2 group"
+    <>
+      <tr className="hover:bg-dark-700/50 transition-colors">
+        {/* Winner */}
+        <td className="table-cell">
+          <div className="flex items-center justify-center gap-2">
+            <CheckCircle className="w-4 h-4 text-accent-success flex-shrink-0" />
+            <Link
+              to={`/clan/${match.winner_clan?.id}`}
+              className="flex items-center gap-2 group"
+            >
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-success/30 to-accent-success/10 flex items-center justify-center shadow-lg overflow-hidden flex-shrink-0 border border-accent-success/30">
+                {match.winner_clan?.logo_url ? (
+                  <img src={match.winner_clan.logo_url} alt={match.winner_clan.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-xs font-bold text-accent-success">{match.winner_clan?.tag}</span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-white group-hover:text-accent-success transition-colors text-sm truncate">
+                  {match.winner_clan?.name}
+                </p>
+                <p className="text-xs text-gray-500">
+                  [{match.winner_clan?.tag}] <span className="text-accent-primary">#{winnerRank}</span>
+                </p>
+              </div>
+            </Link>
+          </div>
+        </td>
+        {/* Loser */}
+        <td className="table-cell">
+          <div className="flex items-center justify-center gap-2">
+            <XCircle className="w-4 h-4 text-accent-danger flex-shrink-0" />
+            <Link
+              to={`/clan/${match.loser_clan?.id}`}
+              className="flex items-center gap-2 group"
+            >
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-danger/30 to-accent-danger/10 flex items-center justify-center shadow-lg overflow-hidden flex-shrink-0 border border-accent-danger/30">
+                {match.loser_clan?.logo_url ? (
+                  <img src={match.loser_clan.logo_url} alt={match.loser_clan.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-xs font-bold text-accent-danger">{match.loser_clan?.tag}</span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-white group-hover:text-accent-danger transition-colors text-sm truncate">
+                  {match.loser_clan?.name}
+                </p>
+                <p className="text-xs text-gray-500">
+                  [{match.loser_clan?.tag}] <span className="text-accent-primary">#{loserRank}</span>
+                </p>
+              </div>
+            </Link>
+          </div>
+        </td>
+        {/* Mode */}
+        <td className="table-cell text-center">
+          <span className="px-2 py-1 bg-accent-secondary/20 text-accent-secondary font-bold rounded-full text-xs">
+            {match.match_mode || '5v5'}
+          </span>
+        </td>
+        {/* Date */}
+        <td className="table-cell text-center text-gray-400 text-xs hidden md:table-cell">
+          {format(new Date(match.created_at), 'MMM d, HH:mm')}
+        </td>
+        {/* Expand Button */}
+        <td className="table-cell text-center">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1 hover:bg-dark-600 rounded transition-colors"
+            title={isExpanded ? 'Hide participants' : 'Show participants'}
           >
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-success/30 to-accent-success/10 flex items-center justify-center shadow-lg overflow-hidden flex-shrink-0 border border-accent-success/30">
-              {match.winner_clan?.logo_url ? (
-                <img src={match.winner_clan.logo_url} alt={match.winner_clan.name} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-xs font-bold text-accent-success">{match.winner_clan?.tag}</span>
-              )}
+            {isExpanded ? (
+              <ChevronUp className="w-4 h-4 text-gray-400" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            )}
+          </button>
+        </td>
+      </tr>
+
+      {/* Expanded Row - Participants */}
+      {isExpanded && (
+        <tr className="bg-dark-800/50">
+          <td colSpan={5} className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Winner Participants */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-accent-success uppercase flex items-center gap-2">
+                  <CheckCircle className="w-3 h-3" />
+                  Winner Team ({winnerParticipants.length})
+                </h4>
+                <div className="space-y-1">
+                  {winnerParticipants.length > 0 ? (
+                    winnerParticipants.map((participant: any) => (
+                      <div
+                        key={participant.user_id}
+                        className="flex items-center gap-2 p-2 bg-accent-success/5 rounded-lg border border-accent-success/20"
+                      >
+                        <div className="w-6 h-6 rounded bg-dark-600 flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {participant.profile?.avatar_url ? (
+                            <img
+                              src={participant.profile.avatar_url}
+                              alt={participant.profile.nickname}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-xs font-bold">
+                              {participant.profile?.nickname?.charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <Link
+                          to={`/player/${participant.user_id}`}
+                          className="text-xs text-white hover:text-accent-success transition-colors truncate"
+                        >
+                          {participant.profile?.nickname || 'Unknown'}
+                        </Link>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 italic">No participants recorded</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Loser Participants */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-accent-danger uppercase flex items-center gap-2">
+                  <XCircle className="w-3 h-3" />
+                  Loser Team ({loserParticipants.length})
+                </h4>
+                <div className="space-y-1">
+                  {loserParticipants.length > 0 ? (
+                    loserParticipants.map((participant: any) => (
+                      <div
+                        key={participant.user_id}
+                        className="flex items-center gap-2 p-2 bg-accent-danger/5 rounded-lg border border-accent-danger/20"
+                      >
+                        <div className="w-6 h-6 rounded bg-dark-600 flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {participant.profile?.avatar_url ? (
+                            <img
+                              src={participant.profile.avatar_url}
+                              alt={participant.profile.nickname}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-xs font-bold">
+                              {participant.profile?.nickname?.charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <Link
+                          to={`/player/${participant.user_id}`}
+                          className="text-xs text-white hover:text-accent-danger transition-colors truncate"
+                        >
+                          {participant.profile?.nickname || 'Unknown'}
+                        </Link>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 italic">No participants recorded</p>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-white group-hover:text-accent-success transition-colors text-sm truncate">
-                {match.winner_clan?.name}
-              </p>
-              <p className="text-xs text-gray-500">
-                [{match.winner_clan?.tag}] <span className="text-accent-primary">#{winnerRank}</span>
-              </p>
-            </div>
-          </Link>
-        </div>
-      </td>
-      {/* Loser */}
-      <td className="table-cell">
-        <div className="flex items-center justify-center gap-2">
-          <XCircle className="w-4 h-4 text-accent-danger flex-shrink-0" />
-          <Link
-            to={`/clan/${match.loser_clan?.id}`}
-            className="flex items-center gap-2 group"
-          >
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-danger/30 to-accent-danger/10 flex items-center justify-center shadow-lg overflow-hidden flex-shrink-0 border border-accent-danger/30">
-              {match.loser_clan?.logo_url ? (
-                <img src={match.loser_clan.logo_url} alt={match.loser_clan.name} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-xs font-bold text-accent-danger">{match.loser_clan?.tag}</span>
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-white group-hover:text-accent-danger transition-colors text-sm truncate">
-                {match.loser_clan?.name}
-              </p>
-              <p className="text-xs text-gray-500">
-                [{match.loser_clan?.tag}] <span className="text-accent-primary">#{loserRank}</span>
-              </p>
-            </div>
-          </Link>
-        </div>
-      </td>
-      {/* Mode */}
-      <td className="table-cell text-center">
-        <span className="px-2 py-1 bg-accent-secondary/20 text-accent-secondary font-bold rounded-full text-xs">
-          {match.match_mode || '5v5'}
-        </span>
-      </td>
-      {/* Date */}
-      <td className="table-cell text-center text-gray-400 text-xs hidden md:table-cell">
-        {format(new Date(match.created_at), 'MMM d, HH:mm')}
-      </td>
-    </tr>
+          </td>
+        </tr>
+      )}
+    </>
   )
 }

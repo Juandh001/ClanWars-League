@@ -268,7 +268,12 @@ export function useMatches(clanId?: string, seasonId?: string | null) {
         *,
         winner_clan:clans!matches_winner_clan_id_fkey(*),
         loser_clan:clans!matches_loser_clan_id_fkey(*),
-        reporter:profiles!matches_reported_by_fkey(*)
+        reporter:profiles!matches_reported_by_fkey(*),
+        match_participants(
+          user_id,
+          team,
+          profile:profiles(id, nickname, avatar_url)
+        )
       `)
       .order('created_at', { ascending: false })
       .limit(50)
